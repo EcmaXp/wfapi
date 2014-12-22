@@ -1,8 +1,11 @@
 wfapi
 =====
 
-Workflowy's Unoffical Simple API for Python3
+Workflowy's Unoffical Simple API for Python3.
+
 No license, but created by @sigsrv.
+
+Note: This api is *VERY UNSTABLE*. i suggest use this api with shared note for limit view.
 
 Features:
 * Something do with node.
@@ -68,13 +71,14 @@ Node operations
 ```python
 wf = wfapi.WeakWorkflowy()
 wf.login(...)
-wf.init(...)
 
+# create nodes
 node = wf.root.create()
 node2 = wf.root.create()
 assert not node
 assert node2 not in node
 
+# node relation
 subnode = node.create()
 subnode2 = node.create()
 subnode3 = node.create()
@@ -83,6 +87,7 @@ assert len(node) == 3
 assert subnode2 in node
 assert subnode3.parent is node
 
+# node support iter
 for some in node:
   if subnode == some:
     break
@@ -93,11 +98,13 @@ subnode.edit("Welcome")
 subnode.delete()
 assert len(node) == 1
 
+# edit node and marked as complete
 subnode2.edit("test")
 subnode2.edit(description="Welcome")
 subnode2.complete()
 
-subnode2.edit("test2")
+# edit node
+subnode3.edit("test2")
 subnode3.uncomplete()
 
 # change later, like "self[node.id] is node"
@@ -121,5 +128,10 @@ with wf.transaction():
   for i in range(10):
     subnode3.create()
 
+# just delete node
 subnode3.delete()
+
+# just print tree;
+wf.root.pretty_print()
+# or node.pretty_print()
 ```
