@@ -1326,7 +1326,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         main_project = self.main_project
         root_project = self.root_project
 
-        # TODO: refreshing project must keep old node if uuid are smae.
+        # TODO: refreshing project must keep old node if uuid are same.
         # TODO: must check root are shared. (share_id and share_type will help us.)
 
         raise NotImplementedError
