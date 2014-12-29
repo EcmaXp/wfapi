@@ -117,6 +117,7 @@ class WFOverflowError(WFError, OverflowError):
 
 class WFOperation():
     operation_name = NotImplemented
+    _cached = None
 
     def __init__(self, node):
         if self.operation_name is NotImplemented:
@@ -144,8 +145,21 @@ class WFOperation():
 
         return self._empty_data_filter(operation)
 
+    def get_cached_operation(self, tr):
+        # TODO: check value modify?
+        
+        cached_tr = None
+        if self._cached is not None:
+            cached, cached_tr = self._cached
+
+        if cached_tr is not tr:
+            cached, cached_tr = self.get_operation(tr), tr
+            self._cached = cached, cached_tr
+        
+        return cached.copy()
+
     def get_client_operation(self, tr):
-        operation = self.get_operation(tr)
+        operation = self.get_cached_operation(tr)
         operation.update(
             client_timestamp=tr.get_client_timestamp(),
             undo_data=self.get_undo(tr),
@@ -160,6 +174,7 @@ class WFOperation():
         raise NotImplementedError
 
     def get_undo(self, tr):
+        # XXX how to coding it? (by automation.)
         undo_data = self.get_default_undo_data()
         undo_data.update(self.get_undo_data(tr))
         return undo_data
@@ -231,14 +246,6 @@ class _WFUnknownOperation(WFOperation):
         # TODO: how to warning?
         warnings.warn("Unknown %s operation detected." % self.operation_name)
         print(self)
-
-    def get_operation(self, tr):
-        operation = dict(
-            type=self.operation_name,
-            data=self.get_operation_data(tr),
-        )
-
-        return self._empty_data_filter(operation)
 
     def get_operation_data(self, tr):
         return self.data
@@ -331,6 +338,7 @@ class WF_CreateOperation(WFOperation):
     @classmethod
     def from_server_operation(cls, tr, projectid, parentid, priority):
         node = tr.wf.new_void_node(projectid)
+        node.lm = tr.get_client_timestamp()
         parent = tr.wf.nodes[parentid]
         return cls(parent, node, priority)
 
@@ -468,8 +476,9 @@ class WF_MoveOperation(WFOperation):
 
     @classmethod
     def prepare_server_operation_json(cls, tr, op):
-        op = super().pre_operation(tr, op)
-        op.data["parent"] = op.data.pop("parentid")
+        op = super().prepare_server_operation_json(tr, op)
+        op.data["node"] = tr.wf.nodes[op.data.pop("projectid")]
+        op.data["parent"] = tr.wf.nodes[op.data.pop("parentid")]
         return op
 
     @classmethod
@@ -538,28 +547,69 @@ class WF_UnshareOperation(WFOperation):
 
 class WF_BulkCreateOperation(WFOperation):
     operation_name = 'bulk_create'
+    NotImplemented
+    
+    # This operation does add node at one times.
+    
+    def __init__(self, parent, project_trees, starting_priority):
+        self.parent = parent
+        self.project_trees = project_trees
+        self.starting_priority = starting_priority
+
+    def pre_operation(self, tr):
+        tr.wf.check_not_exist_node(self.project_trees)
+
+    def post_operation(self, tr):
+        self.parent.insert(self.starting_priority, self.project_trees)
+        tr.wf.add_node(self.project_trees, update_child=True)
+
+    def get_operation_data(self, tr):
+        return dict(
+            parentid=self.parent.id,
+            project_trees=self.project_trees.to_json(),
+            starting_priority=self.starting_priority,
+        )
+
+    def get_undo_data(self, tr):
+        return {}
+
+    @classmethod
+    def prepare_server_operation_json(cls, tr, op):
+        op = super().prepare_server_operation_json(tr, op)
+        op.data["project_trees"] = json.loads(op.data.pop("project_trees")])
+        op.data["parent"] = tr.wf.nodes[op.data.pop("parentid")]
+        return op
+
+    @classmethod
+    def from_server_operation(cls, tr, parent, project_trees, starting_priority):
+        project_trees = tr.wf.NODE_CLASS.from_json(project_trees, parent=parent)
+        return cls(parent, project_trees, starting_priority)
 
 
 class WF_BulkMoveOperation(WFOperation):
     operation_name = 'bulk_move'
-
+    NotImplemented
+    
 
 if FEATURE_XXX_PRO_USER:
     class WF_AddSharedEmailOperation(WFOperation):
         operation_name = 'add_shared_email'
+        NotImplemented
 
 
     class WF_RemoveSharedEmailOperation(WFOperation):
         operation_name = 'remove_shared_email'
+        NotImplemented
 
 
     class WF_RegisterSharedEmailUserOperation(WFOperation):
         operation_name = 'register_shared_email_user'
+        NotImplemented
 
 
     class WF_MakeSharedSubtreePlaceholderOperation(WFOperation):
         operation_name = 'make_shared_subtree_placeholder'
-
+        NotImplemented
 
 class WFBaseNode():
     # this class for fixing weakref for WF_WNode.
@@ -681,6 +731,34 @@ class WFNode(WFBaseNode):
             data["parent"] = parent
 
         return cls(**data)
+        
+    def to_json(self):
+        # def __init__(self, id, lm=0, nm="", ch=None, no="", cp=None, shared=None, parent=None):
+        ret = dict(
+            id=self.id
+            lm=self.lm
+            nm=self.nm,
+        )
+
+        ch = []
+        for node in self:
+            ch.append(node.to_json())
+        
+        if ch:
+            ret.update(ch=ch)
+        
+        if self.no:
+            ret.update(no=self.no)
+
+        if self.cp is not None:
+            ret.update(cp=self.cp)
+
+        if self.shared is not None:
+            ret.update(shared=self.shared)
+            
+        # parent will be ignore.
+        
+        return ret
 
     @classmethod
     def from_root(cls, info):
@@ -791,7 +869,7 @@ class WFServerTransaction(WFBaseTransaction):
 
         client_tr = self.client_transaction
         for operation in client_tr:
-            ret.append(operation.get_operation(client_tr))
+            ret.append(operation.get_cached_operation(client_tr))
             # not get_client_operation
 
         return ret
@@ -1175,9 +1253,13 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
     def new_void_node(self, uuid=None):
         return self.NODE_CLASS.from_void(uuid)
 
-    def add_node(self, node, update_child=False):
+    def add_node(self, node, update_child=True):
+        assert update_child is True
         self.check_not_exist_node(node)
         self.nodes[node.id] = node
+        if update_child:
+            for subnode in node:
+                self.add_node(subnode)
         self.check_exist_node(node)
 
     def remove_node(self, node, recursion_delete=False):
