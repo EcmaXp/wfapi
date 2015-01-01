@@ -1,9 +1,7 @@
 wfapi
 =====
 
-"in Vacation. i coding it."
-
-Workflowy's Unoffical Simple API for Python3.
+Workflowy's Dirty & Unoffical API for Python3.
 
 No license, but created by @sigsrv.
 
@@ -40,14 +38,12 @@ Normal `Workflowy` and `WeakWorkflowy` are different.
 import wfapi
 
 # normal mode
-wf = wfapi.Workflowy()
-wf.login(...)
+wf = wfapi.Workflowy(...)
 node = wf.create(wf.root)
 wf.edit(node, "Something")
 
 # weak mode
-wf = wfapi.WeakWorkflowy()
-wf.login(...)
+wf = wfapi.WeakWorkflowy(...)
 node = wf.root.create()
 node.edit("Something")
 ```
@@ -55,24 +51,22 @@ node.edit("Something")
 Login Example
 ```python
 # login by password
-wf.login("username", "password")
+wfapi.Workflowy(username="username", password="password")
 
 # or session id (no second argument)
-wf.login("sessionid")'
+wfapi.Workflowy(sessionid="sessionid")
 
 # or just use shared note is good idea
 # if https://workflowy.com/s/abcABC1234 is access url
-wf.init("abcABC1234")
+wfapi.Workflowy("abcABC1234")
 
 # if want to logged state and use shared note
-wf.login(..., auto_init=False)
-wf.init("abcABC1234")
+wfapi.Workflowy("abcABC1234", username="username", password="password")
 ```
 
 Node operations
 ```python
-wf = wfapi.WeakWorkflowy()
-wf.login(...)
+wf = wfapi.WeakWorkflowy(...)
 
 # create nodes
 node = wf.root.create()
@@ -109,29 +103,29 @@ subnode2.complete()
 subnode3.edit("test2")
 subnode3.uncomplete()
 
-# change later, like "self[node.id] is node"
-assert self.nodes[subnode3.uuid] is subnode3
+assert self[subnode3.projectid] is subnode3
 
-# change later, like "for node in self"
-# this is internal, i will add node_manger later.
-for node in self.nodes.values():
-  node.id # UUID or "None"(DEFAULT_ROOT_NODE_ID)
-  node.lm # last modify time.
-  node.nm # name
-  node.ch # children (can be None for memory, calling node.ready_ch() will give node.ch to list)
-  node.no # description
-  node.cp # complete marking time. (cp is None -> uncompleted, is not None -> completed)
-  node.shared # shared infomation
-  node.parent # parent node; root node don't have parent.
+for node in self:
+  node.projectid # UUID-like str or "None"(DEFAULT_ROOT_NODE_ID)
+  node.last_modified # last modified time.
+  node.name # name
+  node.children # children (or just iter node)
+  node.description # description
+  node.completed_at # complete marking time (or None)
+  node.completed # [READ-ONLY] boolean value for completed.
+  node.shared # [UNSTABLE] shared infomation
+  node.parent # parent node (or None, that is root node)
 
-# transaction make execute command fast.
-# support rollback yet.
+# transaction make execute command fast, support rollback yet.
 with wf.transaction():
   for i in range(10):
     subnode3.create()
 
-# just delete node
-subnode3.delete()
+# also nested transaction are suppported, with thread safe.
+with wf.transaction():
+  with wf.transaction():
+    # just delete node
+    subnode3.delete()
 
 # just print tree;
 wf.root.pretty_print()
