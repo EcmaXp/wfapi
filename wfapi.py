@@ -16,29 +16,33 @@ import warnings
 import weakref
 from contextlib import closing, contextmanager
 from http.cookiejar import Cookie, CookieJar
-from http.client import HTTPConnection
+from http.client import HTTPConnection, HTTPSConnection
 from pprint import pprint
 from urllib.error import HTTPError
 from urllib.parse import urljoin, urlencode, urlparse
 from urllib.request import build_opener, HTTPCookieProcessor, Request
 from weakref import WeakValueDictionary
 
-
 __all__ = ["Workflowy", "WeakWorkflowy"]
 
+# TODO: Add more debug option!
+DETAIL_DEBUG = False
 
-DEBUG = True
 DEFAULT_WORKFLOWY_URL = "https://workflowy.com/"
 DEFAULT_ROOT_NODE_ID = "None"
-FEATURE_XXX_PRO_USER = False
-# Change FEATURE_XXX_PRO_USER are does nothing. just define more empty classes only.
-DEFAULT_WORKFLOWY_CLIENT_VERSION = 14
-DEFAULT_WORKFLOWY_MONTH_QUOTA = 250
-# At 2014-12-22.
 
-if DEBUG:
+FEATURE_XXX_PRO_USER = False # it does nothing. just define more empty classes.
+FEATURE_USE_FAST_REQUEST = True
+
+DEFAULT_WORKFLOWY_CLIENT_VERSION = 14 # @ 2014-12-22
+DEFAULT_WORKFLOWY_MONTH_QUOTA = 250
+
+
+if DETAIL_DEBUG:
     # for debug.
     HTTPConnection.debuglevel = 1
+    import http.cookiejar
+    http.cookiejar._debug = print
 
 
 @contextmanager
@@ -55,34 +59,42 @@ def debug_helper_with_json(info):
     else:
         yield
 
-class Browser():
+
+class attrdict(dict):
+    def __init__(self, *args, **kwargs):
+          super().__init__(*args, **kwargs)
+          self.__dict__ = self
+
+
+class BaseBrowser():
     def __init__(self, base_url):
+        self.base_url = base_url
+        
+    def open(self, url, *, _raw=False, **kwargs):
+        raise NotImplementedError
+
+    def set_cookie(self, name, value):
+        raise NotImplementedError
+
+    def __getitem__(self, url):
+        return functools.partial(self.open, url)
+
+
+class BuiltinBrowser(BaseBrowser):
+    def __init__(self, base_url):
+        super().__init__(base_url)
         self.cookie_jar = CookieJar()
         self.opener = build_opener(HTTPCookieProcessor(self.cookie_jar))
-        self.opener.addheaders.append(("Connection", "keep-alive"))
-        # TODO: add git auth info in sigsrv server and remove this TODO message.
-        # BIG TODO!!!
-        # BIG TODO!!!
-        # BIG TODO!!!
-        # BIG TODO: how to add connection keep-alive with cookieprocessor?????? HELL
-        # BIG TODO!!!
-        # BIG TODO!!!
-        # BIG TODO!!!
 
-        #self.connection = HTTPSConnection
-        self.base_url = base_url
-
-    def open(self, url, *, _is_json=True, _raw=False, **kwargs):
-        url = urljoin(self.base_url, url)
+    def open(self, url, *, _raw=False, **kwargs):
+        full_url = urljoin(self.base_url, url)
         data = urlencode(kwargs).encode()
         headers = {
             "Content-Type" : "application/x-www-form-urlencoded",
-            "Connection" : "keep-alive",
         }
 
-        req = Request(url, data, headers)
+        req = Request(full_url, data, headers)
         res = self.opener.open(req)
-        print(self.opener.addheaders)
 
         with closing(res) as fp:
             content = fp.read()
@@ -90,6 +102,7 @@ class Browser():
         content = content.decode()
 
         if not _raw:
+            # TODO: must not raise 404 error
             content = json.loads(content)
 
         return res, content
@@ -118,14 +131,82 @@ class Browser():
 
         self.cookie_jar.set_cookie(cookie)
 
-    def __getitem__(self, url):
-        return functools.partial(self.open, url)
+
+class FastBrowser(BaseBrowser):
+    def __init__(self, base_url):
+        super().__init__(base_url)
+        parsed = urlparse(base_url)
+        
+        conn_class = {
+            "http" : HTTPConnection,
+            "https" : HTTPSConnection,
+        }.get(parsed.scheme)
+
+        assert conn_class is not None
+        
+        host, _, port = parsed.netloc.partition(":")
+        port = int(port) if port else None
+        
+        self.addr = host, port
+        self.conn_class = conn_class
+        self.cookie_jar = CookieJar()
+        self._safe = threading.local()
+
+    @property
+    def connection(self):
+        try:
+            return self._safe.conn
+        except AttributeError:
+            self._safe.conn = conn = self.conn_class(*self.addr)
+            return conn
+        
+    def open(self, url, *, _raw=False, **kwargs):
+        full_url = urljoin(self.base_url, url)
+        
+        data = None
+        if kwargs:
+            data = urlencode(kwargs).encode()
+        
+        method = 'POST' if data else 'GET'
+        
+        headers = {
+            "Content-Type" : "application/x-www-form-urlencoded",
+            "Connection" : "keep-alive",
+        }
+        
+        conn = self.connection
+        cookiejar = self.cookie_jar
+
+        req = Request(full_url, data, headers)
+        cookiejar.add_cookie_header(req)
+        headers = req.headers
+        headers.update(req.unredirected_hdrs)
+        
+        conn.request(method, full_url, data, headers)
+        
+        res = conn.getresponse()
+        cookiejar.extract_cookies(res, req)
+
+        with closing(res) as fp:
+            content = fp.read()
+
+        content = content.decode()
+
+        if not _raw:
+            # TODO: must raise 404 error with good exception
+            if res.code == 404:
+                raise RuntimeError("FAIL, it is 404 ERROR!")
+                
+            content = json.loads(content)
+        
+        return res, content
+    
+    set_cookie = BuiltinBrowser.set_cookie
 
 
-class attrdict(dict):
-    def __init__(self, *args, **kwargs):
-          super().__init__(*args, **kwargs)
-          self.__dict__ = self
+Browser = BuiltinBrowser
+if FEATURE_USE_FAST_REQUEST:
+    Browser = FastBrowser
 
 
 class WFError(Exception):
@@ -580,7 +661,7 @@ class WFOperation():
 
     @classmethod
     def _register(cls, operation):
-        assert isinstance(operation, cls)
+        assert issubclass(operation, cls)
 
         operation_name = operation.operation_name
         assert operation_name not in OPERATION_REGISTERED
@@ -1445,7 +1526,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         self.status = attrdict()
         self.nodemgr = self.NODE_MANAGER_CLASS()
         self.current_transaction = None
-        self.inited = False
+        self.inited = False # TODO: how to use this value?
         self.lock = threading.RLock()
         self.quota = WFQuota()
 

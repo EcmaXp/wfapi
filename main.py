@@ -6,7 +6,7 @@ b=time.time()
 print(b-a)
 
 def main():
-    wf = wfapi.WeakWorkflowy("hBYC5FQsDC") # sessionid="050986bf381acc21e56dc3ca59c2c18b")
+    wf = wfapi.WeakWorkflowy("hBYC5FQsDC")
     # https://workflowy.com/s/hBYC5FQsDC
 
     with wf.transaction():
@@ -20,6 +20,8 @@ def main():
             subnode = node.create()
             subnode.edit("Hello world!")
             subnode.complete()
+        else:
+            subnode = node[0]
 
     wf.root.pretty_print()
 
