@@ -68,7 +68,7 @@ class Browser():
         # BIG TODO!!!
         # BIG TODO!!!
         # BIG TODO!!!
-        
+
         #self.connection = HTTPSConnection
         self.base_url = base_url
 
@@ -79,7 +79,7 @@ class Browser():
             "Content-Type" : "application/x-www-form-urlencoded",
             "Connection" : "keep-alive",
         }
-        
+
         req = Request(url, data, headers)
         res = self.opener.open(req)
         print(self.opener.addheaders)
@@ -165,22 +165,22 @@ class _WFNodeInfo():
     def __init__(self, magic=None):
         if magic is not self._MAGIC_INIT:
             raise RuntimeError("it must not inited by other code")
-    
+
     @classmethod
     def from_vaild_json(cls, info):
         assert isinstance(info, dict)
         self = cls(cls._MAGIC_INIT)
         value = cls.default_value.copy()
         value.update(info)
-        
+
         for k, v in value.items():
             setattr(self, k, v)
-        
+
         return self
-    
+
     def from_node_init(self, node, info):
         assert isinstance(info, dict)
-        
+
         slot_map = WFNode.slot_map
         for k, v in info.items():
             setattr(node, slot_map.get(k), v)
@@ -190,14 +190,14 @@ class _WFNodeInfo():
         for k in self.__slots__:
             v = getattr(self, k)
             info[k] = v
-            
+
         del info["parent"]
         return info
 
 
 class WFNode():
     __slots__  = ["info", "__weakref__"]
-    
+
     # TODO: how to control slot info?
     slots = ["projectid", "last_modified", "name", "children", "description", "completed_at", "shared", "parent"]
     virtual_slots = ["parentid", "completed"]
@@ -212,7 +212,7 @@ class WFNode():
         shared = "shared",
         parent = "parent",
     )
-    
+
     def __init__(self, id:str, lm=0, nm="", ch=None, no="", cp=None, shared=None, parent=None):
         if isinstance(id, _WFNodeInfo):
             self.info = id
@@ -242,7 +242,7 @@ class WFNode():
     def projectid(self, projectid):
         if isinstance(projectid, uuid.UUID):
             projectid = str(projectid)
-            
+
         self.info.id = projectid
 
     @property
@@ -253,7 +253,7 @@ class WFNode():
     def last_modified(self):
         assert isinstance(self.info.lm, int)
         return self.info.lm
-        
+
     @last_modified.setter
     def last_modified(self, lm):
         assert isinstance(lm, int)
@@ -262,7 +262,7 @@ class WFNode():
     @property
     def name(self):
         return self.info.nm
-    
+
     @name.setter
     def name(self, name):
         self.info.nm = name
@@ -272,7 +272,7 @@ class WFNode():
         ch = self.info.ch
         if ch is None:
             ch = self.info.ch = []
-        
+
         return ch
 
     @children.setter
@@ -298,20 +298,20 @@ class WFNode():
     @property
     def description(self):
         return self.info.no
-    
+
     @description.setter
     def description(self, description):
         assert isinstance(description, str)
         self.info.no = description
-        
+
     @description.deleter
     def description(self):
         self.info.no = None
-    
+
     @property
     def completed_at(self):
         return self.info.cp
-    
+
     @completed_at.setter
     def completed_at(self, at):
         if at is None:
@@ -327,7 +327,7 @@ class WFNode():
     @property
     def shared(self):
         return self.info.shared
-        
+
     @shared.setter
     def shared(self, shared):
         self.info.shared = shared
@@ -335,11 +335,11 @@ class WFNode():
     @shared.deleter
     def shared(self):
         self.info.shared = None
-        
+
     @property
     def parent(self):
         return self.info.parent
-        
+
     @parent.setter
     def parent(self, parent):
         assert isinstance(parent, WFNode) or parent is None, parent
@@ -441,7 +441,7 @@ class WFNode():
         info = _WFNodeInfo.from_vaild_json(data)
         info.parent = parent
         return cls(info)
-        
+
     def to_json(self):
         return self.info.to_json()
 
@@ -503,7 +503,7 @@ class WFOperation():
 
     def get_cached_operation(self, tr):
         # TODO: check value modify?
-        
+
         cached_tr = None
         if self._cached is not None:
             cached, cached_tr = self._cached
@@ -511,7 +511,7 @@ class WFOperation():
         if cached_tr is not tr:
             cached, cached_tr = self.get_operation(tr), tr
             self._cached = cached, cached_tr
-        
+
         return cached.copy()
 
     def get_client_operation(self, tr):
@@ -790,7 +790,7 @@ class WF_DeleteOperation(WFOperation):
             self.parent.children.remove(node)
 
         tr.wf.remove_node(node, recursion_delete=True)
-        
+
     def get_operation_data(self, tr):
         return dict(
             projectid=self.node.projectid,
@@ -926,9 +926,9 @@ class WF_UnshareOperation(WFOperation):
 class WF_BulkCreateOperation(WFOperation):
     operation_name = 'bulk_create'
     NotImplemented
-    
+
     # This operation does add node at one times.
-    
+
     def __init__(self, parent, project_trees, starting_priority):
         self.parent = parent
         self.project_trees = project_trees
@@ -968,7 +968,7 @@ class WF_BulkCreateOperation(WFOperation):
 class WF_BulkMoveOperation(WFOperation):
     operation_name = 'bulk_move'
     NotImplemented
-    
+
 
 if FEATURE_XXX_PRO_USER:
     @register_operation
@@ -1007,7 +1007,7 @@ class WFBaseTransaction():
 
     def push(self, operation):
         raise NotImplementedError
-    
+
     def pre_operation(self):
         for operation in self:
             operation.pre_operation(self)
@@ -1108,7 +1108,7 @@ class WFClientTransaction(WFBaseTransaction):
     @classmethod
     def generate_tid(cls):
         return "".join(random.choice(cls.IDENTIFY_TID) for i in range(8))
-    
+
     def get_client_timestamp(self, current_time=None):
         if current_time is None:
             current_time = time.time()
@@ -1228,7 +1228,7 @@ class WFQuota(WFBaseQuota):
 class WFSharedQuota(WFBaseQuota):
     MINIMAL = 0
     MAXIMUM = float('inf')
-    
+
     def __init__(self, is_over=False):
         super().__init__(self.MINIMAL, self.MAXIMUM)
         self.is_over = is_over
@@ -1236,7 +1236,7 @@ class WFSharedQuota(WFBaseQuota):
     @property
     def is_over(self):
         return self.used == self.total
-        
+
     @is_over.setter
     def is_over(self, is_over):
         self.used = self.MAXIMUM if is_over else self.MINIMAL
@@ -1260,11 +1260,11 @@ class BaseWorkflowy():
 
 class WFBaseNodeManager():
     NODE_CLASS = NotImplemented
-    
+
 
 class WFNodeManager(WFBaseNodeManager):
     NODE_CLASS = WFNode
-    
+
     def __init__(self):
         super().__init__()
         self.data = WeakValueDictionary()
@@ -1272,7 +1272,7 @@ class WFNodeManager(WFBaseNodeManager):
 
     def update_root(self, root_info):
         self.root = self.new_root_node(root_info)
-    
+
     def __setitem__(self, projectid, node):
         assert self.check_not_exist_node(node)
         assert projectid == node.projectid
@@ -1283,34 +1283,34 @@ class WFNodeManager(WFBaseNodeManager):
         assert self.check_exist_node(node)
         del self.data[node.projectid]
         assert self.check_not_exist_node(node)
-    
+
     def __iter__(self):
         # how to support lock for iter? just copy dict?
         return iter(self.data.values())
-    
+
     def __contains__(self, node):
         if node is None:
             return False
-        
+
         newnode = self.data.get(node.projectid)
         return node is newnode # ?!
-    
+
     def __len__(self):
         return len(self.data)
-    
+
     def __bool__(self):
         return len(self) != 0
-    
+
     @property
     def get(self):
         return self.data.get
-    
+
     @property
     def clear(self):
         return self.data.clear
-    
+
     # TODO: add expend node. (not operation.)
-    
+
     def check_exist_node(self, node):
         original_node = self.get(node.projectid)
         if original_node is None:
@@ -1318,7 +1318,7 @@ class WFNodeManager(WFBaseNodeManager):
         elif original_node is not node:
             raise WFNodeError("{!r} is invalid node.".format(node))
         return True
-        
+
     def check_not_exist_node(self, node):
         if node in self:
             raise WFNodeError("{!r} is already exists.".format(node))
@@ -1332,22 +1332,22 @@ class WFNodeManager(WFBaseNodeManager):
 
     def add(self, node, update_child=True):
         assert update_child is True
-        
+
         added_nodes = 0
         def register_node(node):
             nonlocal added_nodes
             self[node.projectid] = node
             added_nodes += 1
-        
+
         register_node(node)
         if update_child:
             def deep(node):
                 for subnode in node:
                     register_node(subnode)
                     deep(subnode)
-            
+
             deep(node)
-        
+
         return added_nodes
 
     def remove(self, node, recursion_delete=True):
@@ -1363,20 +1363,20 @@ class WFNodeManager(WFBaseNodeManager):
             del node.parent
             del self[node]
             removed_nodes += 1
-        
+
         unregister_node(node)
         if recursion_delete:
             def deep(node):
                 if not node:
                     return
-                
+
                 child_nodes, node.ch = node.ch[:], None
                 for child in child_nodes:
                     unregister_node(node)
                     deep(child)
 
             deep(node)
-            
+
         return removed_nodes
 
     def new_root_node(self, info):
@@ -1435,7 +1435,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
     SERVER_TRANSACTION_CLASS = WFServerTransaction
     CLIENT_SUBTRANSACTION_CLASS = WFSubClientTransaction
     client_version = DEFAULT_WORKFLOWY_CLIENT_VERSION
-    
+
     def __init__(self, share_id=None, *, sessionid=None, username=None, password=None):
         self.browser = self._init_browser()
         self.globals = attrdict()
@@ -1448,11 +1448,11 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         self.inited = False
         self.lock = threading.RLock()
         self.quota = WFQuota()
-        
+
         if sessionid is not None or username is not None:
             username_or_sessionid = sessionid or username
             self.login(username_or_sessionid, password)
-        
+
         self.init(share_id)
 
     def clear(self):
@@ -1506,11 +1506,11 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
         if auto_init:
             return self.init(home_content=home_content)
-    
+
     _SCRIPT_TAG_REGEX = re.compile("".join([
         re.escape('<script type="text/javascript">'), "(.*?)", re.escape('</script>'),
     ]), re.DOTALL)
-    
+
     _SCRIPT_VAR_REGEX = re.compile("".join([
         re.escape("var "), "(.*?)", re.escape(" = "), "(.*?|\{.*?\})", re.escape(";"), '$',
     ]), re.DOTALL | re.MULTILINE)
@@ -1521,7 +1521,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             if "(" in source:
                 # function call found while parsing.
                 continue
-    
+
             for key, value in cls._SCRIPT_VAR_REGEX.findall(source):
                 if value.startswith("'") and value.endswith("'"):
                     assert '"' not in value
@@ -1591,13 +1591,13 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
         # main_project also contains overQuota if shared.
         status.is_shared_quota = "overQuota" in mp
-        
+
         if status.is_shared_quota:
             status.is_over_quota = mp.overQuota
         else:
             status.items_created_in_current_month = mp.itemsCreatedInCurrentMonth
             status.monthly_item_quota = mp.monthlyItemQuota
-            
+
         self._quota_update()
 
     def _quota_update(self):
@@ -1616,7 +1616,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
     def __getitem__(self, node):
         return self.nodemgr[node]
-        
+
     def __iter__(self):
         return iter(self.nodemgr)
 
@@ -1625,7 +1625,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
         if update_quota:
             self.quota += added_nodes
-            
+
     def remove_node(self, node, recursion_delete=False, update_quota=True):
         removed_nodes = self.nodemgr.remove(node, recursion_delete=recursion_delete)
 
@@ -1657,7 +1657,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             push_poll_id=tr.tid,
             push_poll_data=json.dumps(data),
         )
-        
+
         if self.status.share_type is not None:
             # how to merge code with WFClientTransaction.get_transaction_json()
             assert self.status.share_type == "url"
@@ -1687,24 +1687,24 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
                 error = res.get("error")
                 if error:
                     raise WFRuntimeError(error)
-                    
+
                 status = self.status
                 status.most_recent_operation_transaction_id = res.new_most_recent_operation_transaction_id
                 datas.append(json.loads(res.server_run_operation_transaction_json))
-    
+
                 if res.get("need_refreshed_project_tree"):
                     raise NotImplementedError
                     self._refresh_project_tree()
                     # XXX how to execute operation after refresh project tree? no idea.
-    
+
                 status.polling_interval = res.new_polling_interval_in_ms / 1000
-                
+
                 if status.is_shared_quota:
                     status.is_over_quota = res.over_quota
                 else:
                     status.items_created_in_current_month = res.items_created_in_current_month
                     status.monthly_item_quota = res.monthly_item_quota
-                
+
                 self._quota_update()
 
         return datas
@@ -1716,14 +1716,14 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
 class WeakWorkflowy(Workflowy):
     NODE_MANAGER_CLASS = NotImplemented
-    
+
     def __init__(self, *args, **kwargs):
         class _WFNode_(WF_WeakNode):
             __slots__ = []
             _wf = self
-            
+
         class WFDynamicNodeManager(WFNodeManager):
             NODE_CLASS = _WFNode_
-        
+
         self.NODE_MANAGER_CLASS = WFDynamicNodeManager
         super().__init__(*args, **kwargs)
