@@ -18,10 +18,11 @@ def main():
         node.edit("Welcome Workflowy!", "Last Update: %i" % time.time())
         if not node:
             subnode = node.create()
-            subnode.edit("Hello world!")
-            subnode.complete()
         else:
             subnode = node[0]
+
+        subnode.edit("Hello world!", "")
+        subnode.complete()
 
     wf.root.pretty_print()
 

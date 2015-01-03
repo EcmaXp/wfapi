@@ -20,12 +20,13 @@ from http.client import HTTPConnection, HTTPSConnection
 from pprint import pprint
 from urllib.error import HTTPError
 from urllib.parse import urljoin, urlencode, urlparse
-from urllib.request import build_opener, HTTPCookieProcessor, Request
+from urllib.request import build_opener, HTTPCookieProcessor, Request, \
+    HTTPErrorProcessor
 from weakref import WeakValueDictionary
 
 __all__ = ["Workflowy", "WeakWorkflowy"]
 
-# TODO: Add more debug option!
+# TODO: Add more debug option and use logging module.
 DETAIL_DEBUG = False
 
 DEFAULT_WORKFLOWY_URL = "https://workflowy.com/"
@@ -41,8 +42,8 @@ DEFAULT_WORKFLOWY_MONTH_QUOTA = 250
 if DETAIL_DEBUG:
     # for debug.
     HTTPConnection.debuglevel = 1
-    import http.cookiejar
-    http.cookiejar._debug = print
+    #import http.cookiejar
+    #http.cookiejar._debug = print
 
 
 @contextmanager
@@ -64,6 +65,11 @@ class attrdict(dict):
     def __init__(self, *args, **kwargs):
           super().__init__(*args, **kwargs)
           self.__dict__ = self
+          
+    def steal(self, obj, key):
+        value = obj[key]
+        del obj[key]
+        self.update(value)
 
 
 class BaseBrowser():
@@ -78,6 +84,10 @@ class BaseBrowser():
 
     def __getitem__(self, url):
         return functools.partial(self.open, url)
+
+    def reset(self):
+        # TODO: support reset cookies?
+        pass
 
 
 class BuiltinBrowser(BaseBrowser):
@@ -152,13 +162,23 @@ class FastBrowser(BaseBrowser):
         self.cookie_jar = CookieJar()
         self._safe = threading.local()
 
-    @property
-    def connection(self):
+        self._not_opener = build_opener()
+        
+        for handler in self._not_opener.handlers:
+            if isinstance(handler, HTTPErrorProcessor):
+                self.error_handler = handler
+                break
+        else:
+            raise RuntimeEror("Not exists HTTPErrorProcessor in urlopener")
+
+    def get_connection(self):
         try:
-            return self._safe.conn
+            conn = self._safe.conn
         except AttributeError:
-            self._safe.conn = conn = self.conn_class(*self.addr)
-            return conn
+            conn = self.conn_class(*self.addr)
+            self._safe.conn = conn
+        
+        return conn
         
     def open(self, url, *, _raw=False, **kwargs):
         full_url = urljoin(self.base_url, url)
@@ -174,7 +194,7 @@ class FastBrowser(BaseBrowser):
             "Connection" : "keep-alive",
         }
         
-        conn = self.connection
+        conn = self.get_connection()
         cookiejar = self.cookie_jar
 
         req = Request(full_url, data, headers)
@@ -186,17 +206,17 @@ class FastBrowser(BaseBrowser):
         
         res = conn.getresponse()
         cookiejar.extract_cookies(res, req)
+        
+        # TODO: find reason why res.msg are equal with res.headers
+        res.msg = res.reason # FAILBACK
+        self.error_handler.http_response(req, res)
 
         with closing(res) as fp:
             content = fp.read()
 
         content = content.decode()
-
+        
         if not _raw:
-            # TODO: must raise 404 error with good exception
-            if res.code == 404:
-                raise RuntimeError("FAIL, it is 404 ERROR!")
-                
             content = json.loads(content)
         
         return res, content
@@ -1170,7 +1190,7 @@ class WFServerTransaction(WFBaseTransaction):
         self.operations.append(operation)
 
     def commit(self):
-        with self.wf.lock:
+        with self.wf.transaction_lock:
             if self.is_executed:
                 return
 
@@ -1231,7 +1251,7 @@ class WFClientTransaction(WFBaseTransaction):
         return [transaction]
 
     def commit(self):
-        with self.wf.lock:
+        with self.wf.transaction_lock:
             if self.is_executed:
                 return
 
@@ -1242,7 +1262,7 @@ class WFClientTransaction(WFBaseTransaction):
                 self.wf.current_transaction = None
 
 
-class WFSubClientTransaction(WFClientTransaction):
+class WFSimpleSubClientTransaction(WFClientTransaction):
     def __init__(self, wf, tr):
         self.wf = wf
         self.tr = tr
@@ -1255,7 +1275,11 @@ class WFSubClientTransaction(WFClientTransaction):
         # already operation are appended to main transaction.
         assert not self.tr.is_executed
 
+class WFDeamonSubClientTransaction(WFSimpleSubClientTransaction):
+    # TODO: Really need it?
+    pass
 
+    
 class WFBaseQuota():
     def is_full(self):
         return self.used >= self.total
@@ -1510,24 +1534,28 @@ class WFOperationCollection():
             tr += WF_DeleteOperation(node)
 
 
-# XXX: SharedWorkflowy are required? or how to split shared and non-shared processing code.
 class Workflowy(BaseWorkflowy, WFOperationCollection):
     CLIENT_TRANSACTION_CLASS = WFClientTransaction
     SERVER_TRANSACTION_CLASS = WFServerTransaction
-    CLIENT_SUBTRANSACTION_CLASS = WFSubClientTransaction
+    CLIENT_SUBTRANSACTION_CLASS = WFSimpleSubClientTransaction
     client_version = DEFAULT_WORKFLOWY_CLIENT_VERSION
 
     def __init__(self, share_id=None, *, sessionid=None, username=None, password=None):
+        # XXX: SharedWorkflowy are required? or how to split shared and non-shared processing code.
+        self._inited = False
+        
         self.browser = self._init_browser()
+
         self.globals = attrdict()
         self.settings = attrdict()
         self.project_tree = attrdict()
         self.main_project = attrdict()
         self.status = attrdict()
-        self.nodemgr = self.NODE_MANAGER_CLASS()
+
         self.current_transaction = None
-        self.inited = False # TODO: how to use this value?
-        self.lock = threading.RLock()
+        self.transaction_lock = threading.RLock()
+
+        self.nodemgr = self.NODE_MANAGER_CLASS()
         self.quota = WFQuota()
 
         if sessionid is not None or username is not None:
@@ -1535,16 +1563,31 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             self.login(username_or_sessionid, password)
 
         self.init(share_id)
+        
+    @property
+    def inited(self):
+        return self._inited
 
-    def clear(self):
+    @inited.setter
+    def inited(self, inited):
+        if inited:
+            self._inited = True
+        else:
+            self.reset()
+            self._inited = False
+    
+    def reset(self):
+        self.browser.reset()
+
         self.globals.clear()
         self.settings.clear()
         self.project_tree.clear()
         self.main_project.clear()
         self.status.clear()
-        self.nodemgr.clear()
+
         self.current_transaction = None
-        self.inited = False
+
+        self.nodemgr.clear()
         self.quota = WFQuota()
 
     @classmethod
@@ -1556,13 +1599,10 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         pprint(vars(self), width=240)
 
     def transaction(self, *, force_new_transaction=False):
-        with self.lock:
+        with self.transaction_lock:
             if self.current_transaction is None:
                 self.current_transaction = self.CLIENT_TRANSACTION_CLASS(self)
             else:
-                # TODO: if running by deamon, just return sub transaction any call time.
-                # TODO: support deamon.
-                # TODO: new subtransaction class are push operation at commit time.
                 return self.CLIENT_SUBTRANSACTION_CLASS(self, self.current_transaction)
 
             return self.current_transaction
@@ -1618,24 +1658,21 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
     def init(self, share_id=None, *, home_content=None):
         try:
             url = "get_initialization_data"
-            data = dict(
+            info = dict(
                 client_version=self.client_version,
             )
 
             if share_id is not None:
-                data.update(share_id=share_id)
+                info.update(share_id=share_id)
 
-            url += "?" + urlencode(data)
-            res, data = self.browser[url]()
-            # self.browser["get_initialization_data"]
+            info = urlencode(info)
+            res, data = self.browser["get_initialization_data?" + info]()
         except HTTPError as e:
             if e.code == 404:
                 self.inited = False
                 raise WFLoginError("Login Failure.")
             else:
                 raise
-
-        self.clear()
 
         if home_content is None:
             _, home_content = self.browser[""](_raw=True)
@@ -1644,8 +1681,8 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         data = attrdict(data)
         self.globals.update(data.globals)
         self.settings.update(data.settings)
-        self.project_tree.update(data.projectTreeData)
-        self.main_project.update(self.project_tree.mainProjectTreeInfo)
+        self.project_tree.steal(data, "projectTreeData")
+        self.main_project.steal(self.project_tree, "mainProjectTreeInfo")
         self._status_update_by_main_project()
         self.nodemgr.update_root(self.main_project)
         self.inited = True
@@ -1808,3 +1845,53 @@ class WeakWorkflowy(Workflowy):
 
         self.NODE_MANAGER_CLASS = WFDynamicNodeManager
         super().__init__(*args, **kwargs)
+
+
+
+class WFMixinDeamon(BaseWorkflowy):
+    CLIENT_SUBTRANSACTION_CLASS = WFDeamonSubClientTransaction
+    # TODO: new subtransaction class are push operation at commit time.
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.queue = self._new_queue()
+        self.thread = self._new_thread()
+        
+    def _task():
+        queue = self.queue
+        while True:
+            event = queue.get()
+            if event is None:
+                # STOP EVENT
+                return
+            
+            time.sleep(...)
+            # TODO: how to sleep automation?
+            # TODO: use some good schuler?
+
+            with self.transaction_lock:
+                current_transaction = self.current_transaction
+            
+            
+    
+    # TODO: auto start with inited var
+    
+    def _new_thread(self):
+        return threading.Thread(target=self._task)
+    
+    def _new_queue(self):
+        return queue.Queue()
+    
+    def start(self):
+        self.thread.start()
+    
+    def stop(self):
+        # send stop signal to thread.
+        self.queue.put(None)
+    
+    def reset(self):
+        super().reset
+        
+        self.stop()
+        self.queue = self._new_queue()
+        self.thread = self._new_thread()
