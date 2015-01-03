@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-import wfapi
 import time
+a=time.time()
+import wfapi
+b=time.time()
+print(b-a)
 
 def main():
-    wf = wfapi.WeakWorkflowy(sessionid="050986bf381acc21e56dc3ca59c2c18b")
+    wf = wfapi.WeakWorkflowy("hBYC5FQsDC") # sessionid="050986bf381acc21e56dc3ca59c2c18b")
     # https://workflowy.com/s/hBYC5FQsDC
 
     with wf.transaction():

@@ -6,6 +6,7 @@ import functools
 import json
 import os
 import random
+import re
 import string
 import sys
 import threading
@@ -15,26 +16,30 @@ import warnings
 import weakref
 from contextlib import closing, contextmanager
 from http.cookiejar import Cookie, CookieJar
+from http.client import HTTPConnection
 from pprint import pprint
 from urllib.error import HTTPError
 from urllib.parse import urljoin, urlencode, urlparse
 from urllib.request import build_opener, HTTPCookieProcessor, Request
 from weakref import WeakValueDictionary
 
+
 __all__ = ["Workflowy", "WeakWorkflowy"]
 
+
+DEBUG = True
 DEFAULT_WORKFLOWY_URL = "https://workflowy.com/"
 DEFAULT_ROOT_NODE_ID = "None"
 FEATURE_XXX_PRO_USER = False
 # Change FEATURE_XXX_PRO_USER are does nothing. just define more empty classes only.
 DEFAULT_WORKFLOWY_CLIENT_VERSION = 14
+DEFAULT_WORKFLOWY_MONTH_QUOTA = 250
 # At 2014-12-22.
 
-OPERATOR_COLLECTION = {}
-# WFOperation collection.
+if DEBUG:
+    # for debug.
+    HTTPConnection.debuglevel = 1
 
-def gen_uuid():
-    return str(uuid.UUID(bytes=os.urandom(16)))
 
 @contextmanager
 def debug_helper_with_json(info):
@@ -54,6 +59,17 @@ class Browser():
     def __init__(self, base_url):
         self.cookie_jar = CookieJar()
         self.opener = build_opener(HTTPCookieProcessor(self.cookie_jar))
+        self.opener.addheaders.append(("Connection", "keep-alive"))
+        # TODO: add git auth info in sigsrv server and remove this TODO message.
+        # BIG TODO!!!
+        # BIG TODO!!!
+        # BIG TODO!!!
+        # BIG TODO: how to add connection keep-alive with cookieprocessor?????? HELL
+        # BIG TODO!!!
+        # BIG TODO!!!
+        # BIG TODO!!!
+        
+        #self.connection = HTTPSConnection
         self.base_url = base_url
 
     def open(self, url, *, _is_json=True, _raw=False, **kwargs):
@@ -61,10 +77,12 @@ class Browser():
         data = urlencode(kwargs).encode()
         headers = {
             "Content-Type" : "application/x-www-form-urlencoded",
+            "Connection" : "keep-alive",
         }
-
+        
         req = Request(url, data, headers)
         res = self.opener.open(req)
+        print(self.opener.addheaders)
 
         with closing(res) as fp:
             content = fp.read()
@@ -429,7 +447,11 @@ class WFNode():
 
     @classmethod
     def from_void(cls, uuid=None):
-        return cls(uuid or gen_uuid())
+        return cls(uuid or cls.generate_uuid())
+
+    @staticmethod
+    def generate_uuid():
+        return str(uuid.UUID(bytes=os.urandom(16)))
 
 
 class WF_WeakNode(WFNode):
@@ -447,6 +469,8 @@ class WF_WeakNode(WFNode):
 #    pass
 
 
+
+OPERATION_REGISTERED = {}
 class WFOperation():
     operation_name = NotImplemented
     _cached = None
@@ -554,6 +578,19 @@ class WFOperation():
         self.pre_operation(tr)
         self.post_operation(tr)
 
+    @classmethod
+    def _register(cls, operation):
+        assert isinstance(operation, cls)
+
+        operation_name = operation.operation_name
+        assert operation_name not in OPERATION_REGISTERED
+
+        OPERATION_REGISTERED[operation_name] = operation
+
+        return operation
+
+register_operation = WFOperation._register
+
 
 class _WFUnknownOperation(WFOperation):
     operation_name = "_unknown"
@@ -601,6 +638,7 @@ class _WFUnknownOperation(WFOperation):
         return cls(op)
 
 
+@register_operation
 class WF_EditOperation(WFOperation):
     operation_name = 'edit'
 
@@ -638,6 +676,7 @@ class WF_EditOperation(WFOperation):
         )
 
 
+@register_operation
 class WF_CreateOperation(WFOperation):
     operation_name = 'create'
 
@@ -705,6 +744,7 @@ class _WF_CompleteNodeOperation(WFOperation):
         return cls(node)
 
 
+@register_operation
 class WF_CompleteOperation(_WF_CompleteNodeOperation):
     operation_name = 'complete'
 
@@ -722,6 +762,7 @@ class WF_CompleteOperation(_WF_CompleteNodeOperation):
         self.node.completed_at = None
 
 
+@register_operation
 class WF_UncompleteOperation(_WF_CompleteNodeOperation):
     operation_name = 'uncomplete'
 
@@ -729,6 +770,7 @@ class WF_UncompleteOperation(_WF_CompleteNodeOperation):
         self.node.completed_at = None
 
 
+@register_operation
 class WF_DeleteOperation(WFOperation):
     operation_name = 'delete'
 
@@ -761,6 +803,7 @@ class WF_DeleteOperation(WFOperation):
         )
 
 
+@register_operation
 class WF_UndeleteOperation(WFOperation):
     operation_name = 'undelete'
 
@@ -768,6 +811,7 @@ class WF_UndeleteOperation(WFOperation):
         raise NotImplementedError("Just don't do that. :P")
 
 
+@register_operation
 class WF_MoveOperation(WFOperation):
     operation_name = 'move'
 
@@ -817,6 +861,7 @@ class WF_MoveOperation(WFOperation):
         return cls(parent, node, priority)
 
 
+@register_operation
 class WF_ShareOperation(WFOperation):
     operation_name = 'share'
 
@@ -851,6 +896,7 @@ class WF_ShareOperation(WFOperation):
                 previous_write_permission=url_shared.get("write_permission"),
             )
 
+@register_operation
 class WF_UnshareOperation(WFOperation):
     operation_name = 'unshare'
 
@@ -876,6 +922,7 @@ class WF_UnshareOperation(WFOperation):
         return cls(node)
 
 
+@register_operation
 class WF_BulkCreateOperation(WFOperation):
     operation_name = 'bulk_create'
     NotImplemented
@@ -917,27 +964,32 @@ class WF_BulkCreateOperation(WFOperation):
         return cls(parent, project_trees, starting_priority)
 
 
+@register_operation
 class WF_BulkMoveOperation(WFOperation):
     operation_name = 'bulk_move'
     NotImplemented
     
 
 if FEATURE_XXX_PRO_USER:
+    @register_operation
     class WF_AddSharedEmailOperation(WFOperation):
         operation_name = 'add_shared_email'
         NotImplemented
 
 
+    @register_operation
     class WF_RemoveSharedEmailOperation(WFOperation):
         operation_name = 'remove_shared_email'
         NotImplemented
 
 
+    @register_operation
     class WF_RegisterSharedEmailUserOperation(WFOperation):
         operation_name = 'register_shared_email_user'
         NotImplemented
 
 
+    @register_operation
     class WF_MakeSharedSubtreePlaceholderOperation(WFOperation):
         operation_name = 'make_shared_subtree_placeholder'
         NotImplemented
@@ -1123,18 +1175,32 @@ class WFSubClientTransaction(WFClientTransaction):
         assert not self.tr.is_executed
 
 
-class WFQuota():
-    def __init__(self, itemsCreatedInCurrentMonth, monthlyItemQuota):
-        self.used = itemsCreatedInCurrentMonth
-        self.total = monthlyItemQuota
+class WFBaseQuota():
+    def is_full(self):
+        return self.used >= self.total
 
-    @classmethod
-    def from_main_project(cls, info):
-        return cls(info["itemsCreatedInCurrentMonth"], info["monthlyItemQuota"])
+    def is_overflow(self):
+        return self.used > self.total
 
-    @classmethod
-    def build_empty(cls):
-        return cls(0, 0)
+    def handle_overflow(self):
+        # It's NOT OK.
+        raise NotImplementedError
+
+    def handle_underflow(self):
+        # It's OK.
+        pass
+
+    def __iadd__(self, other):
+        self.used += other
+        if self.is_overflow():
+            self.handle_overflow()
+        return self
+
+    def __isub__(self, other):
+        self.used -= other
+        if self.is_underflow():
+            self.handle_underflow()
+        return self
 
     def is_full(self):
         return self.used >= self.total
@@ -1142,17 +1208,41 @@ class WFQuota():
     def is_overflow(self):
         return self.used > self.total
 
-    def __iadd__(self, other):
-        self.used += other
-        if self.is_overflow():
-            pass
-            # raise WFOverflowError("monthly item quota reached.")
-        return self
+    def is_underflow(self):
+        return self.used < 0
 
-    def __isub__(self, other):
-        self.used -= other
-        # underflow are allowed.
-        return self
+
+class WFQuota(WFBaseQuota):
+    def __init__(self, used=0, total=DEFAULT_WORKFLOWY_MONTH_QUOTA):
+        self.used = used
+        self.total = total
+
+    @classmethod
+    def from_main_project(cls, info):
+        return cls(info["itemsCreatedInCurrentMonth"], info["monthlyItemQuota"])
+
+    def handle_overflow(self):
+        raise WFOverflowError("monthly item quota reached.")
+
+
+class WFSharedQuota(WFBaseQuota):
+    MINIMAL = 0
+    MAXIMUM = float('inf')
+    
+    def __init__(self, is_over=False):
+        super().__init__(self.MINIMAL, self.MAXIMUM)
+        self.is_over = is_over
+
+    @property
+    def is_over(self):
+        return self.used == self.total
+        
+    @is_over.setter
+    def is_over(self, is_over):
+        self.used = self.MAXIMUM if is_over else self.MINIMAL
+
+    def handle_overflow(self):
+        raise WFOverflowError("monthly item quota reached in shared view.")
 
 
 class BaseWorkflowy():
@@ -1357,7 +1447,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         self.current_transaction = None
         self.inited = False
         self.lock = threading.RLock()
-        self.quota = WFQuota.build_empty()
+        self.quota = WFQuota()
         
         if sessionid is not None or username is not None:
             username_or_sessionid = sessionid or username
@@ -1374,7 +1464,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         self.nodemgr.clear()
         self.current_transaction = None
         self.inited = False
-        self.quota = WFQuota.build_empty()
+        self.quota = WFQuota()
 
     @classmethod
     def _init_browser(cls):
@@ -1416,38 +1506,30 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
         if auto_init:
             return self.init(home_content=home_content)
+    
+    _SCRIPT_TAG_REGEX = re.compile("".join([
+        re.escape('<script type="text/javascript">'), "(.*?)", re.escape('</script>'),
+    ]), re.DOTALL)
+    
+    _SCRIPT_VAR_REGEX = re.compile("".join([
+        re.escape("var "), "(.*?)", re.escape(" = "), "(.*?|\{.*?\})", re.escape(";"), '$',
+    ]), re.DOTALL | re.MULTILINE)
 
-    @staticmethod
-    def _get_globals_by_home(content):
-        START_TAG = '<script type="text/javascript">'
-        END_TAG = '</script>'
-
-        while START_TAG in content:
-            source, sep, content = content.partition(START_TAG)[2].partition(END_TAG)
-            if "(" in source or ")" in source or not sep:
-                # function call, or EOF found while parsing.
+    @classmethod
+    def _get_globals_by_home(cls, content):
+        for source in cls._SCRIPT_TAG_REGEX.findall(content):
+            if "(" in source:
+                # function call found while parsing.
                 continue
-
-            for line in source.splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-
-                key, sep, value = line.partition(" = ")
-                if sep and key.startswith("var "):
-                    key = key[len("var "):]
-                    if value.endswith(";"):
-                        value = value[:-len(";")]
-                    else:
-                        # TODO: support multi line config.
-                        value = "null"
-                else:
-                    continue
-
-                # XXX for MEDIA_URL.
+    
+            for key, value in cls._SCRIPT_VAR_REGEX.findall(source):
                 if value.startswith("'") and value.endswith("'"):
                     assert '"' not in value
                     value = '"{}"'.format(value[+1:-1])
+
+                if key == "FIRST_LOAD_FLAGS" or key == "SETTINGS":
+                    # TODO: non-standard json parse by demjson?
+                    continue
 
                 value = json.loads(value)
                 yield key, value
@@ -1508,15 +1590,26 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             status.share_id = None
 
         # main_project also contains overQuota if shared.
-        status.items_created_in_current_month = mp.itemsCreatedInCurrentMonth
-        status.monthly_item_quota = mp.monthlyItemQuota
+        status.is_shared_quota = "overQuota" in mp
+        
+        if status.is_shared_quota:
+            status.is_over_quota = mp.overQuota
+        else:
+            status.items_created_in_current_month = mp.itemsCreatedInCurrentMonth
+            status.monthly_item_quota = mp.monthlyItemQuota
+            
         self._quota_update()
 
     def _quota_update(self):
         status = self.status
         quota = self.quota
-        quota.used = status.items_created_in_current_month
-        quota.total = status.monthly_item_quota
+
+        if status.is_shared_quota:
+            quota.is_over = status.is_over_quota
+        else:
+            quota.used = status.items_created_in_current_month
+            quota.total = status.monthly_item_quota
+
 
     def __contains__(self, node):
         return node in self.nodemgr
@@ -1604,9 +1697,14 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
                     self._refresh_project_tree()
                     # XXX how to execute operation after refresh project tree? no idea.
     
-                status.items_created_in_current_month = res.items_created_in_current_month
-                status.monthly_item_quota = res.monthly_item_quota
                 status.polling_interval = res.new_polling_interval_in_ms / 1000
+                
+                if status.is_shared_quota:
+                    status.is_over_quota = res.over_quota
+                else:
+                    status.items_created_in_current_month = res.items_created_in_current_month
+                    status.monthly_item_quota = res.monthly_item_quota
+                
                 self._quota_update()
 
         return datas
@@ -1629,13 +1727,3 @@ class WeakWorkflowy(Workflowy):
         
         self.NODE_MANAGER_CLASS = WFDynamicNodeManager
         super().__init__(*args, **kwargs)
-
-
-def _collect_operation():
-    for key, value in globals().items():
-        if isinstance(value, type) and issubclass(value, WFOperation):
-            if not key.startswith("_"):
-                yield value.operation_name, value
-
-OPERATOR_COLLECTION.update(_collect_operation())
-del _collect_operation
