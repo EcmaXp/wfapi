@@ -16,7 +16,7 @@ __version__ = "0.1.17-alpha"
 # https://www.python.org/dev/peps/pep-0396/
 # http://semver.org/lang/ko/
 
-__doc__ = __doc__.format(globals())
+__doc__ = __doc__.format_map(globals())
 
 import copy
 import functools
