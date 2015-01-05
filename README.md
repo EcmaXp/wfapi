@@ -1,34 +1,10 @@
 wfapi
 =====
 
-Workflowy's Dirty & Unoffical API for Python3.
+Workflowy's Unoffical API for Python3.
 
-No license, but created by @sigsrv.
-
-Note: This api is *VERY UNSTABLE*. i suggest use this api with shared note for limit view.
-
-Features:
-* Something do with node.
-* Access shared note.
-* Support transaction (commit only -_-;)
-* Easy use.
-* Login and session
-
-Support operation:
-* create
-* edit
-* delete
-* complete
-* uncomplete
-
-Not Support Yet:
-* expend node
-* undo
-* refresh 
-* rollback transaction
-* deamon croller
-* quota control
-* pro features
+Note: This api is *UNSTABLE*.
+I suggest use this api with shared note for limit view.
 
 Example
 =======

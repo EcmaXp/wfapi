@@ -1,9 +1,27 @@
 #!/usr/bin/env python3
-"Workflowy API"
+"""Workflowy Python3 API v{__version__}
+{__project_url__} By {__author__}
+
+Workflowy: Organize your brain.
+But did you think about what if workflowy can access by API?
+
+This module are provide many
+"""
+
+__project_url__ = "http://github.com/sigsrv/wfapi"
+__author__ = "sigsrv (sigsrv@sigsrv.net)"
+
+__version__ = "0.1.17-alpha"
+# based on github commit count in 0.1
+# https://www.python.org/dev/peps/pep-0396/
+# http://semver.org/lang/ko/
+
+__doc__ = __doc__.format(globals())
 
 import copy
 import functools
 import json
+import logging
 import os
 import random
 import re
@@ -15,8 +33,8 @@ import uuid
 import warnings
 import weakref
 from contextlib import closing, contextmanager
-from http.cookiejar import Cookie, CookieJar
 from http.client import HTTPConnection, HTTPSConnection
+from http.cookiejar import Cookie, CookieJar
 from pprint import pprint
 from urllib.error import HTTPError
 from urllib.parse import urljoin, urlencode, urlparse
@@ -1275,6 +1293,7 @@ class WFSimpleSubClientTransaction(WFClientTransaction):
         # already operation are appended to main transaction.
         assert not self.tr.is_executed
 
+
 class WFDeamonSubClientTransaction(WFSimpleSubClientTransaction):
     # TODO: Really need it?
     pass
@@ -1563,7 +1582,44 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             self.login(username_or_sessionid, password)
 
         self.init(share_id)
-        
+
+    # smart handler
+    @contextmanager
+    def smart_handle_init(self):
+        try:
+            yield
+            self.handle_init()
+        finally:
+            pass
+
+    @contextmanager
+    def smart_handle_reset(self):
+        try:
+            self.handle_reset()
+            yield
+        finally:
+            pass
+
+    def handle_init(self):
+        pass
+    
+    def handle_reset(self):
+        pass
+
+    def handle_logout(self):
+        self.inited = False
+        raise WFLoginError("Login Failure.")
+
+    def reset(self):
+        # TODO: give argument to _reset and smart handler?
+        with self.smart_handle_reset():
+            self._reset()
+
+    def init(self, *args, **kwargs):
+        # TODO: give argument to smart handler? (_init require argument!)
+        with self.smart_handle_init():
+            self._init(*args, **kwargs)
+
     @property
     def inited(self):
         return self._inited
@@ -1575,8 +1631,9 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         else:
             self.reset()
             self._inited = False
-    
-    def reset(self):
+
+    def _reset(self):
+        self.handle_reset()
         self.browser.reset()
 
         self.globals.clear()
@@ -1655,7 +1712,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
                 value = json.loads(value)
                 yield key, value
 
-    def init(self, share_id=None, *, home_content=None):
+    def _init(self, share_id=None, *, home_content=None):
         try:
             url = "get_initialization_data"
             info = dict(
@@ -1669,9 +1726,9 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             res, data = self.browser["get_initialization_data?" + info]()
         except HTTPError as e:
             if e.code == 404:
-                self.inited = False
-                raise WFLoginError("Login Failure.")
+                self.handle_logout()
             else:
+                # TODO: warp HTTPError? or in browser?
                 raise
 
         if home_content is None:
@@ -1685,6 +1742,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         self.main_project.steal(self.project_tree, "mainProjectTreeInfo")
         self._status_update_by_main_project()
         self.nodemgr.update_root(self.main_project)
+        self.handle_init()
         self.inited = True
 
     @property
@@ -1792,40 +1850,46 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         logged_out = data.get("logged_out")
         if logged_out:
             raise WFLoginError("logout detected, don't share session with real user.")
-
+        
     def _status_update_by_push_poll(self, data):
         results = data.get("results")
         if results is None:
+            # TODO: raise error?
             return
 
         datas = []
         with debug_helper_with_json(data):
             for res in results:
                 res = attrdict(res)
-                error = res.get("error")
-                if error:
-                    raise WFRuntimeError(error)
-
-                status = self.status
-                status.most_recent_operation_transaction_id = res.new_most_recent_operation_transaction_id
-                datas.append(json.loads(res.server_run_operation_transaction_json))
-
-                if res.get("need_refreshed_project_tree"):
-                    raise NotImplementedError
-                    self._refresh_project_tree()
-                    # XXX how to execute operation after refresh project tree? no idea.
-
-                status.polling_interval = res.new_polling_interval_in_ms / 1000
-
-                if status.is_shared_quota:
-                    status.is_over_quota = res.over_quota
-                else:
-                    status.items_created_in_current_month = res.items_created_in_current_month
-                    status.monthly_item_quota = res.monthly_item_quota
-
-                self._quota_update()
+                self._status_update_by_push_poll_sub(res)
 
         return datas
+
+    def _status_update_by_push_poll_sub(self, res):
+        error = res.get("error")
+        if error:
+            raise WFRuntimeError(error)
+
+        status = self.status
+        status.most_recent_operation_transaction_id = \
+            res.new_most_recent_operation_transaction_id
+        datas.append(json.loads(res.server_run_operation_transaction_json))
+
+        if res.get("need_refreshed_project_tree"):
+            raise NotImplementedError
+            self._refresh_project_tree()
+            # XXX how to execute operation after refresh project tree? no idea.
+
+        status.polling_interval = res.new_polling_interval_in_ms / 1000
+
+        if status.is_shared_quota:
+            status.is_over_quota = res.over_quota
+        else:
+            status.items_created_in_current_month = \
+                res.items_created_in_current_month
+            status.monthly_item_quota = res.monthly_item_quota
+
+        self._quota_update()
 
     def _execute_server_transaction(self, tr, data):
         transaction = self.SERVER_TRANSACTION_CLASS.from_server_operations(self, tr, data)
@@ -1847,7 +1911,6 @@ class WeakWorkflowy(Workflowy):
         super().__init__(*args, **kwargs)
 
 
-
 class WFMixinDeamon(BaseWorkflowy):
     CLIENT_SUBTRANSACTION_CLASS = WFDeamonSubClientTransaction
     # TODO: new subtransaction class are push operation at commit time.
@@ -1855,24 +1918,49 @@ class WFMixinDeamon(BaseWorkflowy):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.queue = self._new_queue()
+        # INTERNAL: self.queue is internal value at this time.
         self.thread = self._new_thread()
+        self.default_execute_wait = 5
         
     def _task():
         queue = self.queue
+        # queue can be overflow
+        
+        with self.transaction_lock:
+            while queue:
+                self.queue.get_nowait()
+
+            queue.put(0)
+            # INTERNAL: start counter for task        
+
         while True:
+            wait = self.default_execute_wait
             event = queue.get()
             if event is None:
                 # STOP EVENT
                 return
             
-            time.sleep(...)
+            time.sleep(wait)
             # TODO: how to sleep automation?
             # TODO: use some good schuler?
 
             with self.transaction_lock:
                 current_transaction = self.current_transaction
-            
-            
+                if not self.current_transaction.operations:
+                    queue.put(event + wait)
+                    continue
+                
+                if event >= self.status.default_execute_wait:
+                    self.current_transaction = None
+                    self.execute_transaction(current_transaction)
+                    
+                queue.put(0)
+                # reset counter
+    
+    def execute_transaction(self, tr):
+        # it's ok because lock is RLock!
+        with self.transaction_lock:
+            super().execute_transaction(tr)
     
     # TODO: auto start with inited var
     
@@ -1895,3 +1983,30 @@ class WFMixinDeamon(BaseWorkflowy):
         self.stop()
         self.queue = self._new_queue()
         self.thread = self._new_thread()
+
+def main():
+    #class AutoWeakWorkflowy(WeakWorkflowy, WFMixinDeamon):
+    #    pass
+
+    wf = wfapi.WeakWorkflowy("hBYC5FQsDC")
+    wf.start()
+
+    with wf.transaction():
+        if not wf.root:
+            node = wf.root.create()
+        else:
+            node = wf.root[0]
+
+        node.edit("Welcome Workflowy!", "Last Update: %i" % time.time())
+        if not node:
+            subnode = node.create()
+        else:
+            subnode = node[0]
+
+        subnode.edit("Hello world!", "")
+        subnode.complete()
+
+    wf.root.pretty_print()
+
+if __name__ == "__main__":
+    main()
