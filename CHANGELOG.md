@@ -6,7 +6,6 @@ wfapi changelog
 Features:
 
  - support deamon
- - deamon croller
 
 Not Yet:
 
@@ -20,12 +19,16 @@ Not Yet:
  - rollback transaction
  - pro features
 
-
-## 0.1.17 (2015-01-05)
+## 0.1.19 (2015-01-05)
 
 Features:
 
- - ?
+ - Access attribute with node are changed.
+ - very simple deamon croller (and unstable)
+ 
+## 0.1.17 (2015-01-05)
+
+Released for pre-alpha use, and registered to PyPI.
 
 Added:
 
@@ -91,5 +94,3 @@ Features:
    - delete
    - undelete
    - move
-   - share
-   - unshare

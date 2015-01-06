@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Workflowy Python3 API v{__version__}
-{__project_url__} By {__author__}
+{__project_url__} by {__author__}
 
 Workflowy: Organize your brain.
 But did you think about what if workflowy can access by API?
 
-This module are provide many
+This module provide api for workflowy with python3.
+
+You can add node, edit, complete, or uncomplete, etc.
 """
 
 __project_url__ = "http://github.com/sigsrv/wfapi"
 __author__ = "sigsrv (sigsrv@sigsrv.net)"
 
-__version__ = "0.1.17-alpha"
-# based on github commit count in 0.1
+__version__ = "0.1.18-alpha"
+# based on github commit count in 0.1.x
 # https://www.python.org/dev/peps/pep-0396/
 # http://semver.org/lang/ko/
 
@@ -23,6 +26,7 @@ import functools
 import json
 import logging
 import os
+import queue
 import random
 import re
 import string
@@ -247,6 +251,10 @@ if FEATURE_USE_FAST_REQUEST:
     Browser = FastBrowser
 
 
+class WFProjectReload(BaseException):
+    pass
+
+
 class WFError(Exception):
     pass
 
@@ -276,33 +284,50 @@ class WFURLSharedInfo():
     pass
 
 
-class _WFNodeInfo():
+def _raise_found_node_parent(self, node):
+    raise WFNodeError("Already parent found.")
+
+
+class WFRawNode():
     __slots__  = ["id", "lm", "nm", "ch", "no", "cp", "shared", "parent"]
     default_value = dict(lm=0, nm="", ch=None, no="", cp=None, shared=None, parent=None)
-    _MAGIC_INIT = object()
 
-    def __init__(self, magic=None):
-        if magic is not self._MAGIC_INIT:
-            raise RuntimeError("it must not inited by other code")
+    def __setattr__(self, key, value):
+        alter_key = "set_{}".format(key)
+        if hasattr(self, alter_key):
+            getattr(self, alter_key)(value)
+        else:
+            super().__setattr__(key, value)
 
     @classmethod
     def from_vaild_json(cls, info):
         assert isinstance(info, dict)
-        self = cls(cls._MAGIC_INIT)
+        self = cls()
         value = cls.default_value.copy()
         value.update(info)
 
+        setattr_node = super(cls, self).__setattr__
         for k, v in value.items():
-            setattr(self, k, v)
+            setattr_node(k, v)
 
         return self
 
-    def from_node_init(self, node, info):
+    @classmethod
+    def from_node_init(cls, node, info):
         assert isinstance(info, dict)
 
-        slot_map = WFNode.slot_map
+        self = cls()
+        node_cls = type(self)
+        slot_map = node_cls.slot_map
+        filter_map = node_cls.filter_map
+
+        setattr_node = super(cls, self).__setattr__
         for k, v in info.items():
-            setattr(node, slot_map.get(k), v)
+            k = slot_map.get(k, k)
+            if k in filter_map:
+                getattr(node, "set_{}".format(k))(v)
+            else:
+                setattr_node(k, v)
 
     def to_json(self):
         info = {}
@@ -313,187 +338,162 @@ class _WFNodeInfo():
         del info["parent"]
         return info
 
-
-class WFNode():
-    __slots__  = ["info", "__weakref__"]
-
-    # TODO: how to control slot info?
-    slots = ["projectid", "last_modified", "name", "children", "description", "completed_at", "shared", "parent"]
-    virtual_slots = ["parentid", "completed"]
-
-    slot_map = dict(
-        id = "projectid",
-        lm = "last_modified",
-        nm = "name",
-        ch = "children",
-        no = "description",
-        cp = "completed_at",
-        shared = "shared",
-        parent = "parent",
-    )
-
-    def __init__(self, id:str, lm=0, nm="", ch=None, no="", cp=None, shared=None, parent=None):
-        if isinstance(id, _WFNodeInfo):
-            self.info = id
-        else:
-            self.info = _WFNodeInfo(_WFNodeInfo._MAGIC_INIT)
-            self.info.from_node_init(self, dict(
-                id = id, # UUID or "None"(DEFAULT_ROOT_NODE_ID)
-                lm = lm, # Last modified time
-                nm = nm, # name
-                ch = ch, # children
-                no = no, # description
-                cp = cp, # Last completed time (or None)
-                shared = shared, # shared infomation
-                parent = parent, # parent node (or None)
-            ))
-
-    def __getitem__(self, name):
-        alter_name = self.slot_map.get(name)
-        if alter_name is not None:
-            return getattr(self, alter_name)
-
-    @property
-    def projectid(self):
-        return self.info.id
-
-    @projectid.setter
-    def projectid(self, projectid):
+    def set_projectid(self, projectid):
         if isinstance(projectid, uuid.UUID):
             projectid = str(projectid)
 
-        self.info.id = projectid
+        self.id = projectid
+
+    def set_last_modified(self, last_modified):
+        assert isinstance(last_modified, int)
+        self.lm = last_modified
+
+    def set_name(self, name):
+        self.nm = name
+
+    def set_children(self, childs):
+        if hasattr(self, "ch"):
+            # if already ch is exists, how to work?
+            raise NotImplementedError
+        elif childs is None:
+            self.ch = None
+        else:
+            ch = self.ch = []
+            for child in childs:
+                if child.parent is not None:
+                    _raise_found_node_parent(node)
+
+                child.parent = self
+                ch.append(child)
+
+    def set_description(self, description):
+        assert isinstance(description, str)
+        self.no = description
+
+    def set_completed_at(self, at):
+        if at is None:
+            self.cp = None
+        else:
+            assert isinstance(at, (int, float))
+            self.cp = int(at)
+
+    # XXX RuntimeError: maximum recursion depth exceeded
+    #def set_shared(self, shared):
+    #    # TODO: check isinstance with shared
+    #    self.shared = shared
+    #def set_parent(self, parent):
+    #    assert isinstance(parent, WFNode) or parent is None, parent
+    #    self.parent = parent
+
+
+class WFNode():
+    __slots__  = ["raw", "__weakref__"]
+
+    # TODO: how to control slot info?
+    slots = ["projectid", "last_modified", "name", "children", "description", "completed_at", "shared", "parent"]
+    virtual_slots = ["parentid", "is_completed"]
+
+    slot_map = dict(
+        id="projectid",
+        lm="last_modified",
+        nm="name",
+        ch="children",
+        no="description",
+        cp="completed_at",
+        shared="shared",
+        parent="parent",
+    )
+
+    def __init__(self, projectid, last_modified=0, name="", children=None, \
+                 description="", completed_at=None, shared=None, parent=None):
+        if isinstance(projectid, WFRawNode):
+            self.raw = projectid
+        else:
+            self.raw = WFRawNode.from_node_init(self, dict(
+                id=projectid, # UUID-like str or DEFAULT_ROOT_NODE_ID("None")
+                lm=last_modified, # Last modified by minute (- @joined)
+                nm=name, # Name
+                ch=children, # Children
+                no=description, # Description
+                cp=completed_at, # Last complete by minuted (- @joined or None)
+                shared=shared, # Shared infomation
+                parent=parent, # Parent node (or None)
+            ))
+
+    @property
+    def projectid(self):
+        return self.raw.id
+
+    @property
+    def last_modified(self):
+        return self.raw.lm
+
+    @property
+    def name(self):
+        return self.raw.nm
+
+    @property
+    def description(self):
+        return self.raw.no
+
+    @property
+    def completed_at(self):
+        return self.raw.cp
+
+    @property
+    def shared(self):
+        return self.raw.shared
+
+    @property
+    def parent(self):
+        return self.raw.parent
+
+    @property
+    def children(self):
+        ch = self.raw.ch
+        if ch is None:
+            ch = self.raw.ch = []
+
+        return ch
 
     @property
     def parentid(self):
         return self.parent.projectid
 
     @property
-    def last_modified(self):
-        assert isinstance(self.info.lm, int)
-        return self.info.lm
-
-    @last_modified.setter
-    def last_modified(self, lm):
-        assert isinstance(lm, int)
-        self.info.lm = lm
-
-    @property
-    def name(self):
-        return self.info.nm
-
-    @name.setter
-    def name(self, name):
-        self.info.nm = name
-
-    @property
-    def children(self):
-        ch = self.info.ch
-        if ch is None:
-            ch = self.info.ch = []
-
-        return ch
-
-    @children.setter
-    def children(self, childs):
-        if hasattr(self.info, "ch"):
-            # if already ch is exists, how to work?
-            raise NotImplementedError
-        elif childs is None:
-            self.info.ch = None
-        else:
-            ch = self.info.ch = []
-            for child in childs:
-                if child.parent is not None:
-                    self._raise_found_node_parent(node)
-
-                child.parent = self
-                ch.append(child)
-
-    @children.deleter
-    def children(self):
-        self.info.ch = None
-
-    @property
-    def description(self):
-        return self.info.no
-
-    @description.setter
-    def description(self, description):
-        assert isinstance(description, str)
-        self.info.no = description
-
-    @description.deleter
-    def description(self):
-        self.info.no = None
-
-    @property
-    def completed_at(self):
-        return self.info.cp
-
-    @completed_at.setter
-    def completed_at(self, at):
-        if at is None:
-            self.info.cp = None
-        else:
-            assert isinstance(at, (int, float))
-            self.info.cp = int(at)
-
-    @property
-    def completed(self):
+    def is_completed(self):
         return self.completed_at is not None
 
-    @property
-    def shared(self):
-        return self.info.shared
-
-    @shared.setter
-    def shared(self, shared):
-        self.info.shared = shared
-
-    @shared.deleter
-    def shared(self):
-        self.info.shared = None
-
-    @property
-    def parent(self):
-        return self.info.parent
-
-    @parent.setter
-    def parent(self, parent):
-        assert isinstance(parent, WFNode) or parent is None, parent
-        self.info.parent = parent
-
-    @parent.deleter
-    def parent(self):
-        self.info.parent = None
-
     def __repr__(self):
-        return "<{clsname}({id!r})>".format(clsname = type(self).__name__, id = self.projectid)
+        return "<{clsname}({projectid!r})>".format(
+            clsname=type(self).__name__,
+            projectid=self.projectid,
+        )
 
     def __str__(self):
-        return "{clsname}(id={id!r}, lm={lm!r}, nm={nm!r}, ch={ch!r}, no={no!r}, cp={cp!r}{_shared}, parent={parent!r})".format(
+        vif = lambda obj, t, f: t if obj is not None else f
+        raw = self.raw
+        
+        return ("{clsname}(projectid={id!r}, last_modified={last_modified!r}, "
+            "name={name!r}, children={children!r}, description={description!r}"
+            "{_completed_at}{_shared}, parent={parent})").format(
             clsname = type(self).__name__,
-            id = self.projectid,
-            lm = self.last_modified,
-            nm = self.name,
-            ch = self.children,
-            no = self.info.no,
-            cp = self.info.cp,
-            _shared = ", shared={!r}".format(self.info.shared) if self.info.shared is not None else "",
-            parent = self.info.parent,
+            projectid = self.projectid,
+            last_modified = self.last_modified,
+            name = self.name,
+            children = self.children,
+            description = self.description,
+            _completed_at = vif(raw.cp, ", cp={!r}".format(raw.cp), ""),
+            _shared = vif(raw.shared, ", shared={!r}".format(raw.shared), ""),
+            parent = vif(raw.parent, "...", None),
         )
 
     def copy(self):
         return copy.copy(self)
 
-    def _raise_found_node_parent(self, node):
-        raise WFNodeError("Already parent found.")
-        # TODO: remove bad english. :(
-
     def insert(self, index, node):
         if node.parent is not None:
-            self._raise_found_node_parent(node)
+            _raise_found_node_parent(node)
 
         self.children.insert(index, node)
         node.parent = self
@@ -502,23 +502,23 @@ class WFNode():
         return len(self) > 0
 
     def __len__(self):
-        return len(self.info.ch) if self.info.ch else 0
+        return len(self.raw.ch) if self.raw.ch else 0
 
     def __contains__(self, item):
-        if self.info.ch is None:
+        if self.raw.ch is None:
             return False
 
         return item in self.children
 
     def __iter__(self):
-        ch = self.info.ch
+        ch = self.raw.ch
         if ch is None:
             return iter(())
 
         return iter(ch)
 
     def __getitem__(self, item):
-        ch = self.info.ch
+        ch = self.raw.ch
         if not isinstance(item, slice):
             if ch is None:
                 raise IndexError(item)
@@ -536,9 +536,9 @@ class WFNode():
         if is_empty_root:
             p("[*]", "Home")
         else:
-            p("[%s]" % (self.info.cp and "-" or " ",), self.name, "{%s} " % self.projectid)
+            p("[%s]" % (self.raw.cp and "-" or " ",), self.name, "{%s} " % self.projectid)
 
-        for line in self.info.no.splitlines():
+        for line in self.raw.no.splitlines():
             p(line)
 
         indent += INDENT_SIZE
@@ -557,12 +557,12 @@ class WFNode():
                 new_ch.append(child)
             data["ch"] = new_ch
 
-        info = _WFNodeInfo.from_vaild_json(data)
+        info = WFRawNode.from_vaild_json(data)
         info.parent = parent
         return cls(info)
 
     def to_json(self):
-        return self.info.to_json()
+        return self.raw.to_json()
 
     @classmethod
     def from_void(cls, uuid=None):
@@ -582,6 +582,39 @@ class WF_WeakNode(WFNode):
 
         raise AttributeError(item)
 
+    @WFNode.name.setter
+    def name(self, name):
+        self.edit(name, None)
+        self.raw.nm = name
+
+    @WFNode.description.setter
+    def description(self, description):
+        self.edit(None, description)
+        self.raw.no = description
+
+    @property
+    def completed_at(self):
+        # TODO: convert wf's timestamp to py's timestamp
+        convert = lambda x: x
+        return convert(self.raw.cp)
+
+    @completed_at.setter
+    def completed_at(self, completed_at):
+        completed_at = self.complete(completed_at)
+        self.raw.cp = completed_at
+
+    @WFNode.completed_at.setter
+    def is_completed(self, is_completed):
+        if is_completed:
+            self.raw.cp = self.complete()
+        else:
+            self.uncomplete()
+            self.raw.cp = None
+
+    # TODO: allow shared modify?
+    #@property
+    #def shared(self):
+    #    return self.raw.shared
 
 #class WFOperationEngine():
 #    "Use yield for operation, and undo?"
@@ -770,12 +803,13 @@ class WF_EditOperation(WFOperation):
         assert tr.wf.nodemgr.check_exist_node(self.node)
 
     def post_operation(self, tr):
-        node = self.node
+        rawnode = self.node.raw
+        
         if self.name is not None:
-            node.name = self.name
+            rawnode.name = self.name
 
         if self.description is not None:
-            node.description = self.description
+            rawnode.description = self.description
 
     @classmethod
     def from_server_operation(cls, tr, node, name=None, description=None):
@@ -829,18 +863,14 @@ class WF_CreateOperation(WFOperation):
     @classmethod
     def from_server_operation(cls, tr, projectid, parentid, priority):
         node = tr.wf.nodemgr.new_void_node(projectid)
-        node.last_modified = tr.get_client_timestamp()
+        rawnode = node.raw
+        rawnode.last_modified = tr.get_client_timestamp()
         parent = tr.wf[parentid]
         return cls(parent, node, priority)
 
 
 class _WF_CompleteNodeOperation(WFOperation):
     operation_name = NotImplemented
-
-    def __init__(self, node):
-        self.node = node
-        self.modified = None
-        # modified will auto fill by get_operation_data
 
     def pre_operation(self, tr):
         assert tr.wf.nodemgr.check_exist_node(self.node)
@@ -867,9 +897,10 @@ class _WF_CompleteNodeOperation(WFOperation):
 class WF_CompleteOperation(_WF_CompleteNodeOperation):
     operation_name = 'complete'
 
-    def __init__(self, node):
-        super().__init__(node)
-        self.modified = None
+    def __init__(self, node, modified=None):
+        self.node = node
+        self.modified = modified
+        # modified will auto fill by get_operation_data if None
 
     def pre_operation(self, tr):
         super().pre_operation(tr)
@@ -878,15 +909,20 @@ class WF_CompleteOperation(_WF_CompleteNodeOperation):
 
     def post_operation(self, tr):
         super().post_operation(tr)
-        self.node.completed_at = None
+        rawnode = self.node.raw
+        rawnode.completed_at = self.modified
 
 
 @register_operation
 class WF_UncompleteOperation(_WF_CompleteNodeOperation):
     operation_name = 'uncomplete'
 
+    def __init__(self, node):
+        self.node = node
+
     def post_operation(self, tr):
-        self.node.completed_at = None
+        rawnode = self.node.raw
+        rawnode.completed_at = None
 
 
 @register_operation
@@ -947,9 +983,10 @@ class WF_MoveOperation(WFOperation):
             raise WFNodeError("{!r} not have {!r}".format(self.parent, self.node))
 
     def post_operation(self, tr):
-        self.node.parent.remove(self.node)
-        self.node.parent = self.parent
-        self.parent.insert(self.priority, self.node)
+        rawnode = self.node.raw
+        rawnode.parent.remove(self.node)
+        rawnode.parent = self.parent
+        parent.insert(self.priority, self.node)
 
     def get_operation_data(self, tr):
         return dict(
@@ -980,9 +1017,10 @@ class WF_MoveOperation(WFOperation):
         return cls(parent, node, priority)
 
 
-@register_operation
+# @register_operation
 class WF_ShareOperation(WFOperation):
     operation_name = 'share'
+    NotImplemented
 
     def __init__(self, node, share_type="url", write_permission=False):
         assert share_type == "url"
@@ -991,7 +1029,8 @@ class WF_ShareOperation(WFOperation):
         self.write_permission = False
 
     def post_operation(self, tr):
-        self.node.shared = None
+        rawnode = self.node
+        rawnode.shared = ...
         raise NotImplementedError
 
     def get_operation_data(self, tr):
@@ -1027,7 +1066,8 @@ class WF_UnshareOperation(WFOperation):
         pass
 
     def post_operation(self, tr):
-        self.node.shared = None
+        rawnode = self.node
+        rawnode.shared = None
 
     def get_operation_data(self, tr):
         return dict(
@@ -1044,9 +1084,7 @@ class WF_UnshareOperation(WFOperation):
 @register_operation
 class WF_BulkCreateOperation(WFOperation):
     operation_name = 'bulk_create'
-    NotImplemented
-
-    # This operation does add node at one times.
+    # This operation does add node (with many child) at one times.
 
     def __init__(self, parent, project_trees, starting_priority):
         self.parent = parent
@@ -1083,7 +1121,7 @@ class WF_BulkCreateOperation(WFOperation):
         return cls(parent, project_trees, starting_priority)
 
 
-@register_operation
+# @register_operation
 class WF_BulkMoveOperation(WFOperation):
     operation_name = 'bulk_move'
     NotImplemented
@@ -1394,8 +1432,8 @@ class WFNodeManager(WFBaseNodeManager):
         self.data = WeakValueDictionary()
         self.root = None
 
-    def update_root(self, root_info):
-        self.root = self.new_root_node(root_info)
+    def update_root(self, root_project, root_project_children):
+        self.root = self.new_root_node(root_project, root_project_children)
 
     def __setitem__(self, projectid, node):
         assert self.check_not_exist_node(node)
@@ -1503,20 +1541,21 @@ class WFNodeManager(WFBaseNodeManager):
 
         return removed_nodes
 
-    def new_root_node(self, info):
-        root = info["rootProject"]
-        child = info["rootProjectChildren"]
-        if root is None:
-            root = dict(id=DEFAULT_ROOT_NODE_ID)
+    def new_root_node(self, root_project, root_project_children):
+        if root_project is None:
+            root_project = dict(id=DEFAULT_ROOT_NODE_ID)
         else:
-            root.update(id=DEFAULT_ROOT_NODE_ID)
+            root_project.update(id=DEFAULT_ROOT_NODE_ID)
             # in shared mode, root will have uuid -(replace)> DEFAULT_ROOT_NODE_ID
 
-        root.update(ch=child)
-        root = self.new_node_from_json(root)
+        root_project.update(ch=root_project_children)
+        root = self.new_node_from_json(root_project)
         self.add(root, update_child=True)
         return root
 
+    @property
+    def pretty_print(self):
+        return self.root.pretty_print
 
 class WFOperationCollection():
     NODE_MANAGER_CLASS = WFNodeManager
@@ -1540,9 +1579,12 @@ class WFOperationCollection():
 
         return node
 
-    def complete(self, node):
+    def complete(self, node, client_timestamp=None):
         with self.transaction() as tr:
-            tr += WF_CompleteOperation(node)
+            if client_timestamp is None:
+                client_timestamp = tr.get_client_timestamp()
+            tr += WF_CompleteOperation(node, client_timestamp)
+        return client_timestamp
 
     def uncomplete(self, node):
         with self.transaction() as tr:
@@ -1647,15 +1689,24 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         self.nodemgr.clear()
         self.quota = WFQuota()
 
+    def print_status(self):
+        rvar = dict(
+            globals=self.globals,
+            settings=self.settings,
+            project_tree=self.project_tree,
+            main_project=self.main_project,
+            quota=self.quota,
+        )
+            
+        pprint(vars(self), width=240)
+
     @classmethod
     def _init_browser(cls):
         browser = Browser(DEFAULT_WORKFLOWY_URL)
         return browser
 
-    def print_status(self):
-        pprint(vars(self), width=240)
-
     def transaction(self, *, force_new_transaction=False):
+        # TODO: how to handle force_new_transaction?
         with self.transaction_lock:
             if self.current_transaction is None:
                 self.current_transaction = self.CLIENT_TRANSACTION_CLASS(self)
@@ -1741,7 +1792,10 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         self.project_tree.steal(data, "projectTreeData")
         self.main_project.steal(self.project_tree, "mainProjectTreeInfo")
         self._status_update_by_main_project()
-        self.nodemgr.update_root(self.main_project)
+        self.nodemgr.update_root(
+            root_project=self.main_project.pop("rootProject"),
+            root_project_children=self.main_project.pop("rootProjectChildren"),
+        )
         self.handle_init()
         self.inited = True
 
@@ -1808,6 +1862,10 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         if update_quota:
             self.quota -= removed_nodes
 
+    @property
+    def pretty_print(self):
+        return self.nodemgr.pretty_print
+
     def _refresh_project_tree(self):
         nodes = self.nodes
         main_project = self.main_project
@@ -1857,13 +1915,10 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             # TODO: raise error?
             return
 
-        datas = []
         with debug_helper_with_json(data):
             for res in results:
                 res = attrdict(res)
-                self._status_update_by_push_poll_sub(res)
-
-        return datas
+                yield self._status_update_by_push_poll_sub(res)
 
     def _status_update_by_push_poll_sub(self, res):
         error = res.get("error")
@@ -1873,8 +1928,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         status = self.status
         status.most_recent_operation_transaction_id = \
             res.new_most_recent_operation_transaction_id
-        datas.append(json.loads(res.server_run_operation_transaction_json))
-
+            
         if res.get("need_refreshed_project_tree"):
             raise NotImplementedError
             self._refresh_project_tree()
@@ -1890,6 +1944,9 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             status.monthly_item_quota = res.monthly_item_quota
 
         self._quota_update()
+        
+        data = json.loads(res.server_run_operation_transaction_json)
+        return data
 
     def _execute_server_transaction(self, tr, data):
         transaction = self.SERVER_TRANSACTION_CLASS.from_server_operations(self, tr, data)
@@ -1922,13 +1979,14 @@ class WFMixinDeamon(BaseWorkflowy):
         self.thread = self._new_thread()
         self.default_execute_wait = 5
         
-    def _task():
+    def _task(self):
         queue = self.queue
         # queue can be overflow
         
         with self.transaction_lock:
-            while queue:
-                self.queue.get_nowait()
+            while not queue.empty():
+                queue.get_nowait()
+                queue.task_done()
 
             queue.put(0)
             # INTERNAL: start counter for task        
@@ -1936,8 +1994,17 @@ class WFMixinDeamon(BaseWorkflowy):
         while True:
             wait = self.default_execute_wait
             event = queue.get()
+            
             if event is None:
                 # STOP EVENT
+                while not queue.empty():
+                    queue.get_nowait()
+                    queue.task_done()
+                    # TODO: warning not queued event?
+                    # TODO: just new stop flag?
+
+                queue.task_done()
+                # for stop event.
                 return
             
             time.sleep(wait)
@@ -1946,8 +2013,13 @@ class WFMixinDeamon(BaseWorkflowy):
 
             with self.transaction_lock:
                 current_transaction = self.current_transaction
-                if not self.current_transaction.operations:
+                if current_transaction is None:
+                    with self.transaction() as current_transaction:
+                        pass
+                    
+                if not current_transaction.operations:
                     queue.put(event + wait)
+                    queue.task_done()
                     continue
                 
                 if event >= self.status.default_execute_wait:
@@ -1955,6 +2027,7 @@ class WFMixinDeamon(BaseWorkflowy):
                     self.execute_transaction(current_transaction)
                     
                 queue.put(0)
+                queue.task_done()
                 # reset counter
     
     def execute_transaction(self, tr):
@@ -1976,6 +2049,8 @@ class WFMixinDeamon(BaseWorkflowy):
     def stop(self):
         # send stop signal to thread.
         self.queue.put(None)
+        self.thread.join()
+        # TODO: what if queue are not empty?
     
     def reset(self):
         super().reset
@@ -1985,10 +2060,10 @@ class WFMixinDeamon(BaseWorkflowy):
         self.thread = self._new_thread()
 
 def main():
-    #class AutoWeakWorkflowy(WeakWorkflowy, WFMixinDeamon):
-    #    pass
+    class AutoWeakWorkflowy(WeakWorkflowy, WFMixinDeamon):
+        pass
 
-    wf = wfapi.WeakWorkflowy("hBYC5FQsDC")
+    wf = WeakWorkflowy("hBYC5FQsDC")
     wf.start()
 
     with wf.transaction():
@@ -2003,10 +2078,10 @@ def main():
         else:
             subnode = node[0]
 
-        subnode.edit("Hello world!", "")
-        subnode.complete()
+        subnode.name = "Hello world!"
+        subnode.is_completed = not subnode.is_completed
 
-    wf.root.pretty_print()
-
+    wf.pretty_print()
+    
 if __name__ == "__main__":
     main()
