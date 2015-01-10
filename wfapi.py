@@ -87,7 +87,7 @@ class attrdict(dict):
     def __init__(self, *args, **kwargs):
           super().__init__(*args, **kwargs)
           self.__dict__ = self
-          
+
     def steal(self, obj, key):
         value = obj[key]
         del obj[key]
@@ -97,7 +97,7 @@ class attrdict(dict):
 class BaseBrowser():
     def __init__(self, base_url):
         self.base_url = base_url
-        
+
     def open(self, url, *, _raw=False, **kwargs):
         raise NotImplementedError
 
@@ -168,24 +168,24 @@ class FastBrowser(BaseBrowser):
     def __init__(self, base_url):
         super().__init__(base_url)
         parsed = urlparse(base_url)
-        
+
         conn_class = {
             "http" : HTTPConnection,
             "https" : HTTPSConnection,
         }.get(parsed.scheme)
 
         assert conn_class is not None
-        
+
         host, _, port = parsed.netloc.partition(":")
         port = int(port) if port else None
-        
+
         self.addr = host, port
         self.conn_class = conn_class
         self.cookie_jar = CookieJar()
         self._safe = threading.local()
 
         self._not_opener = build_opener()
-        
+
         for handler in self._not_opener.handlers:
             if isinstance(handler, HTTPErrorProcessor):
                 self.error_handler = handler
@@ -199,23 +199,23 @@ class FastBrowser(BaseBrowser):
         except AttributeError:
             conn = self.conn_class(*self.addr)
             self._safe.conn = conn
-        
+
         return conn
-        
+
     def open(self, url, *, _raw=False, **kwargs):
         full_url = urljoin(self.base_url, url)
-        
+
         data = None
         if kwargs:
             data = urlencode(kwargs).encode()
-        
+
         method = 'POST' if data else 'GET'
-        
+
         headers = {
             "Content-Type" : "application/x-www-form-urlencoded",
             "Connection" : "keep-alive",
         }
-        
+
         conn = self.get_connection()
         cookiejar = self.cookie_jar
 
@@ -223,12 +223,12 @@ class FastBrowser(BaseBrowser):
         cookiejar.add_cookie_header(req)
         headers = req.headers
         headers.update(req.unredirected_hdrs)
-        
+
         conn.request(method, full_url, data, headers)
-        
+
         res = conn.getresponse()
         cookiejar.extract_cookies(res, req)
-        
+
         # TODO: find reason why res.msg are equal with res.headers
         res.msg = res.reason # FAILBACK
         self.error_handler.http_response(req, res)
@@ -237,12 +237,12 @@ class FastBrowser(BaseBrowser):
             content = fp.read()
 
         content = content.decode()
-        
+
         if not _raw:
             content = json.loads(content)
-        
+
         return res, content
-    
+
     set_cookie = BuiltinBrowser.set_cookie
 
 
@@ -280,8 +280,15 @@ class WFBaseSharedInfo():
     pass
 
 
-class WFURLSharedInfo():
-    pass
+class WFURLSharedInfo(WFBaseSharedInfo):
+    __slots__ = []
+
+    def __init__(self, shared_info):
+        pass
+
+    @classmethod
+    def from_shared_info(cls):
+        pass
 
 
 def _raise_found_node_parent(self, node):
@@ -289,6 +296,10 @@ def _raise_found_node_parent(self, node):
 
 
 class WFRawNode():
+    # TODO: add 'as' attribute for embbedded node!
+    # FORMAT IS {"as":"hBYC5FQsDC","lm":2044727,"id":"c1e46ee6-53b1-4999-b65b-f11131afbaa0","nm":""}
+    # MEAN MUST GIVE wf argument for new_node! OMG!!!
+
     __slots__  = ["id", "lm", "nm", "ch", "no", "cp", "shared", "parent"]
     default_value = dict(lm=0, nm="", ch=None, no="", cp=None, shared=None, parent=None)
 
@@ -473,7 +484,7 @@ class WFNode():
     def __str__(self):
         vif = lambda obj, t, f: t if obj is not None else f
         raw = self.raw
-        
+
         return ("{clsname}(projectid={id!r}, last_modified={last_modified!r}, "
             "name={name!r}, children={children!r}, description={description!r}"
             "{_completed_at}{_shared}, parent={parent})").format(
@@ -804,7 +815,7 @@ class WF_EditOperation(WFOperation):
 
     def post_operation(self, tr):
         rawnode = self.node.raw
-        
+
         if self.name is not None:
             rawnode.name = self.name
 
@@ -1336,7 +1347,7 @@ class WFDeamonSubClientTransaction(WFSimpleSubClientTransaction):
     # TODO: Really need it?
     pass
 
-    
+
 class WFBaseQuota():
     def is_full(self):
         return self.used >= self.total
@@ -1594,6 +1605,10 @@ class WFOperationCollection():
         with self.transaction() as tr:
             tr += WF_DeleteOperation(node)
 
+    def search(self, node, pattern):
+        # pattern is very complex.
+        # http://blog.workflowy.com/2012/09/25/hidden-search-operators/
+        raise NotImplementedError("search are not implemented yet.")
 
 class Workflowy(BaseWorkflowy, WFOperationCollection):
     CLIENT_TRANSACTION_CLASS = WFClientTransaction
@@ -1604,7 +1619,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
     def __init__(self, share_id=None, *, sessionid=None, username=None, password=None):
         # XXX: SharedWorkflowy are required? or how to split shared and non-shared processing code.
         self._inited = False
-        
+
         self.browser = self._init_browser()
 
         self.globals = attrdict()
@@ -1644,7 +1659,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
     def handle_init(self):
         pass
-    
+
     def handle_reset(self):
         pass
 
@@ -1697,7 +1712,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             main_project=self.main_project,
             quota=self.quota,
         )
-            
+
         pprint(vars(self), width=240)
 
     @classmethod
@@ -1792,6 +1807,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         self.project_tree.steal(data, "projectTreeData")
         self.main_project.steal(self.project_tree, "mainProjectTreeInfo")
         self._status_update_by_main_project()
+        pprint(self.main_project)
         self.nodemgr.update_root(
             root_project=self.main_project.pop("rootProject"),
             root_project_children=self.main_project.pop("rootProjectChildren"),
@@ -1908,7 +1924,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         logged_out = data.get("logged_out")
         if logged_out:
             raise WFLoginError("logout detected, don't share session with real user.")
-        
+
     def _status_update_by_push_poll(self, data):
         results = data.get("results")
         if results is None:
@@ -1928,7 +1944,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         status = self.status
         status.most_recent_operation_transaction_id = \
             res.new_most_recent_operation_transaction_id
-            
+
         if res.get("need_refreshed_project_tree"):
             raise NotImplementedError
             self._refresh_project_tree()
@@ -1944,7 +1960,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             status.monthly_item_quota = res.monthly_item_quota
 
         self._quota_update()
-        
+
         data = json.loads(res.server_run_operation_transaction_json)
         return data
 
@@ -1971,30 +1987,30 @@ class WeakWorkflowy(Workflowy):
 class WFMixinDeamon(BaseWorkflowy):
     CLIENT_SUBTRANSACTION_CLASS = WFDeamonSubClientTransaction
     # TODO: new subtransaction class are push operation at commit time.
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.queue = self._new_queue()
         # INTERNAL: self.queue is internal value at this time.
         self.thread = self._new_thread()
         self.default_execute_wait = 5
-        
+
     def _task(self):
         queue = self.queue
         # queue can be overflow
-        
+
         with self.transaction_lock:
             while not queue.empty():
                 queue.get_nowait()
                 queue.task_done()
 
             queue.put(0)
-            # INTERNAL: start counter for task        
+            # INTERNAL: start counter for task
 
         while True:
             wait = self.default_execute_wait
             event = queue.get()
-            
+
             if event is None:
                 # STOP EVENT
                 while not queue.empty():
@@ -2006,7 +2022,7 @@ class WFMixinDeamon(BaseWorkflowy):
                 queue.task_done()
                 # for stop event.
                 return
-            
+
             time.sleep(wait)
             # TODO: how to sleep automation?
             # TODO: use some good schuler?
@@ -2016,45 +2032,47 @@ class WFMixinDeamon(BaseWorkflowy):
                 if current_transaction is None:
                     with self.transaction() as current_transaction:
                         pass
-                    
+
                 if not current_transaction.operations:
                     queue.put(event + wait)
                     queue.task_done()
                     continue
-                
+
                 if event >= self.status.default_execute_wait:
                     self.current_transaction = None
                     self.execute_transaction(current_transaction)
-                    
+
                 queue.put(0)
                 queue.task_done()
                 # reset counter
-    
+
     def execute_transaction(self, tr):
         # it's ok because lock is RLock!
         with self.transaction_lock:
             super().execute_transaction(tr)
-    
+
     # TODO: auto start with inited var
-    
+
     def _new_thread(self):
-        return threading.Thread(target=self._task)
-    
+        thread = threading.Thread(target=self._task)
+        thread.daemon = True # ?
+        return thread
+
     def _new_queue(self):
         return queue.Queue()
-    
+
     def start(self):
         self.thread.start()
-    
+
     def stop(self):
         # send stop signal to thread.
         self.queue.put(None)
         self.thread.join()
         # TODO: what if queue are not empty?
-    
+
     def reset(self):
         super().reset
-        
+
         self.stop()
         self.queue = self._new_queue()
         self.thread = self._new_thread()
@@ -2082,6 +2100,6 @@ def main():
         subnode.is_completed = not subnode.is_completed
 
     wf.pretty_print()
-    
+
 if __name__ == "__main__":
     main()

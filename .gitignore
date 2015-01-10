@@ -1,3 +1,8 @@
+# ignore for debug only files.
+document_view.js
+result.txt
+main.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
