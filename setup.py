@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
+# https://github.com/pypa/sampleproject
 # https://docs.python.org/3.4/distributing/index.html
 # https://packaging.python.org/en/latest/distributing.html
 
-from distutils.core import setup
+from setuptools import setup, find_packages
 import wfapi
 
 wfapi_doc = wfapi.__doc__.splitlines()
@@ -15,7 +16,7 @@ setup(
     version=wfapi.__version__,
     description=wfapi_doc[0],
     long_description="\n".join(wfapi_doc[1:]), # change later.
-    py_modules=['wfapi'],
+    packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Operating System :: OS Independent",
