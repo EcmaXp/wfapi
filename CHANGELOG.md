@@ -1,23 +1,31 @@
 wfapi changelog
 ===============
 
-## 0.1.x (?)
+## 0.2.x (?)
 
 Features:
 
  - support deamon
+ - search like website's keyword (`is:completed`)
 
 Not Yet:
 
  - cleanup changlog
  - cleanup readme
  - support all operation for deamon croller
+ - support embbeded node
+ - support shared node (by URL method only)
  - good logging system for track error
- - expend node
- - undo
  - refresh project with keep node object
- - rollback transaction
+ - rollback transaction & undo operation
+ - expend node
  - pro features
+
+## 0.2.0 (2015-01-10)
+
+Features:
+ 
+ - Module system are applyed.
 
 ## 0.1.19 (2015-01-05)
 

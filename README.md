@@ -9,40 +9,63 @@ I suggest use this api with shared note for limit view.
 Example
 =======
 
-Normal `Workflowy` and `WeakWorkflowy` are different.
+Normal `Workflowy` and `WeakWorkflowy`(require new class) are different.
 ```python
-import wfapi
+from wfapi import *
 
 # normal mode
-wf = wfapi.Workflowy(...)
+wf = Workflowy(...)
 node = wf.create(wf.root)
 wf.edit(node, "Something")
 
 # weak mode
-wf = wfapi.WeakWorkflowy(...)
+class WeakWorkflowy(WFMixinWeak, Workflowy):
+    pass
+
+wf = WeakWorkflowy(...)
 node = wf.root.create()
 node.edit("Something")
 ```
 
 Login Example
 ```python
+from wfapi import *
+
 # login by password
-wfapi.Workflowy(username="username", password="password")
+Workflowy(username="username", password="password")
 
 # or session id (no second argument)
-wfapi.Workflowy(sessionid="sessionid")
+Workflowy(sessionid="sessionid")
 
 # or just use shared note is good idea
 # if https://workflowy.com/s/abcABC1234 is access url
-wfapi.Workflowy("abcABC1234")
+Workflowy("abcABC1234")
 
 # if want to logged state and use shared note
-wfapi.Workflowy("abcABC1234", username="username", password="password")
+Workflowy("abcABC1234", username="username", password="password")
+```
+
+Deamon (+ Weak) Example
+```python
+from wfapi import *
+
+class DeamonWeakWorkflowy(WFMixinDeamon, WFMixinWeak, Workflowy):
+    pass
+
+wf = DeamonWorkflowy(...)
+wf.start()
+node = wf.create(wf.root)
+node.edit("Something")
+wf.stop()
 ```
 
 Node operations
 ```python
-wf = wfapi.WeakWorkflowy(...)
+from wfapi import *
+class WeakWorkflowy(Workflowy):
+    pass
+
+wf = WeakWorkflowy(...)
 
 # create nodes
 node = wf.root.create()
@@ -92,6 +115,19 @@ for node in self:
   node.shared # [UNSTABLE] shared infomation
   node.parent # parent node (or None, that is root node)
 
+# just print tree;
+wf.root.pretty_print()
+# or node.pretty_print()
+```
+
+Transaction example (only commit are supported)
+```python
+from wfapi import *
+class WeakWorkflowy(WFMixinWeak, Workflowy):
+    pass
+
+wf = WeakWorkflowy(...)
+
 # transaction make execute command fast, support rollback yet.
 with wf.transaction():
   for i in range(10):
@@ -102,8 +138,4 @@ with wf.transaction():
   with wf.transaction():
     # just delete node
     subnode3.delete()
-
-# just print tree;
-wf.root.pretty_print()
-# or node.pretty_print()
 ```
