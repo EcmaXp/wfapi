@@ -3,6 +3,7 @@ import copy
 import sys
 from . import utils as _utils
 from .settings import DEFAULT_ROOT_NODE_ID
+import uuid
 
 
 def _raise_found_node_parent(self, node):
@@ -41,23 +42,25 @@ class WFRawNode():
         assert isinstance(info, dict)
 
         self = cls()
-        node_cls = type(self)
+        node_cls = type(node)
         slot_map = node_cls.slot_map
-        filter_map = node_cls.filter_map
 
         setattr_node = super(cls, self).__setattr__
-        for k, v in info.items():
-            k = slot_map.get(k, k)
-            if k in filter_map:
-                getattr(node, "set_{}".format(k))(v)
+        for key, value in info.items():
+            alter_key = slot_map.get(key)
+            setter = getattr(self, "set_{}".format(alter_key), None)
+            if alter_key and setter is not None:
+                setter(value)
             else:
-                setattr_node(k, v)
+                setattr_node(key, value)
+
+        return self
 
     def to_json(self):
         info = {}
-        for k in self.__slots__:
-            v = getattr(self, k)
-            info[k] = v
+        for key in self.__slots__:
+            value = getattr(self, key)
+            info[k] = value
 
         del info["parent"]
         return info
@@ -221,7 +224,7 @@ class WFNode():
             _raise_found_node_parent(node)
 
         self.children.insert(index, node)
-        node.parent = self
+        node.raw.parent = self
 
     def __bool__(self):
         return len(self) > 0

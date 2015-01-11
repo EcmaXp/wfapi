@@ -3,6 +3,8 @@ from . import utils as _utils
 import time
 
 
+# TODO: Transaction must support splited projects!
+
 class WFBaseTransaction():
     is_executed = False
 

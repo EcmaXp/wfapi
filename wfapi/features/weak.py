@@ -16,8 +16,39 @@ class WF_WeakNode(WFNode):
     def __getattr__(self, item):
         if not item.startswith("_") and item in dir(WFOperationCollection):
             return functools.partial(getattr(self._wf, item), self)
-
+        
         raise AttributeError(item)
+
+    # ??
+    @property
+    def projectid(self):
+        return self.raw.id
+
+    @property
+    def last_modified(self):
+        return self.raw.lm
+
+    @property
+    def name(self):
+        return self.raw.nm
+
+    @property
+    def description(self):
+        return self.raw.no
+
+    @property
+    def completed_at(self):
+        return self.raw.cp
+
+    @property
+    def shared(self):
+        return self.raw.shared
+
+    @property
+    def parent(self):
+        return self.raw.parent
+    # ??
+
 
     @WFNode.name.setter
     def name(self, name):

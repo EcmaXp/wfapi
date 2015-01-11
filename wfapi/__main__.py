@@ -2,11 +2,10 @@
 from wfapi import *
 
 def main():
-    class DeamonWeakWorkflowy(WFMixinDeamon, WFMixinWeak, Workflowy):
+    class WeakWorkflowy(WFMixinWeak, Workflowy):
         pass
 
-    wf = DeamonWeakWorkflowy("hBYC5FQsDC")
-    wf.start()
+    wf = WeakWorkflowy("hBYC5FQsDC")
 
     with wf.transaction():
         if not wf.root:
@@ -18,7 +17,6 @@ def main():
         node.is_completed = False
 
     wf.pretty_print()
-    wf.stop()
     
 if __name__ == "__main__":
     main()

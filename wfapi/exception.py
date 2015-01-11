@@ -8,6 +8,10 @@ class WFError(Exception):
     pass
 
 
+class WFUnsupportedFeature(WFError):
+    pass
+
+
 class WFRuntimeError(Exception):
     pass
 

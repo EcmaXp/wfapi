@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
+"""Provide Workflowy access
+
+>>> Workflowy("")
+
+"""
+
 import re
 import json
 import threading
@@ -11,6 +17,7 @@ from .nodemgr import WFNodeManager
 from .settings import DEFAULT_WORKFLOWY_CLIENT_VERSION, DEFAULT_WORKFLOWY_URL
 from .browser import DefaultBrowser
 from .operation import WFOperationCollection
+from .exception import WFLoginError
 from .quota import *
 from .utils import *
 
@@ -29,39 +36,6 @@ class BaseWorkflowy():
 
     def transaction(self):
         raise NotImplementedError
-
-class Workflowy(BaseWorkflowy, WFOperationCollection):
-    CLIENT_TRANSACTION_CLASS = WFClientTransaction
-    SERVER_TRANSACTION_CLASS = WFServerTransaction
-    CLIENT_SUBTRANSACTION_CLASS = WFSimpleSubClientTransaction
-    DEFAULT_BROWSER_CLASS = DefaultBrowser
-    NODE_MANAGER_CLASS = WFNodeManager
-
-    client_version = DEFAULT_WORKFLOWY_CLIENT_VERSION
-
-    def __init__(self, share_id=None, *, sessionid=None, username=None, password=None):
-        # XXX: SharedWorkflowy are required? or how to split shared and non-shared processing code.
-        self._inited = False
-
-        self.browser = self._init_browser()
-
-        self.globals = attrdict()
-        self.settings = attrdict()
-        self.project_tree = attrdict()
-        self.main_project = attrdict()
-        self.status = attrdict()
-
-        self.current_transaction = None
-        self.transaction_lock = threading.RLock()
-
-        self.nodemgr = self.NODE_MANAGER_CLASS()
-        self.quota = WFQuota()
-
-        if sessionid is not None or username is not None:
-            username_or_sessionid = sessionid or username
-            self.login(username_or_sessionid, password)
-
-        self.init(share_id)
 
     # smart handler
     @contextmanager
@@ -86,9 +60,8 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
     def handle_reset(self):
         pass
 
-    def handle_logout(self):
-        self.inited = False
-        raise WFLoginError("Login Failure.")
+    def handle_logout(self, counter=0):
+        pass
 
     def reset(self):
         # TODO: give argument to _reset and smart handler?
@@ -109,8 +82,47 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         if inited:
             self._inited = True
         else:
-            self.reset()
+            if self._inited:
+                self.reset()
+            
             self._inited = False
+
+
+class Workflowy(BaseWorkflowy, WFOperationCollection):
+    CLIENT_TRANSACTION_CLASS = WFClientTransaction
+    SERVER_TRANSACTION_CLASS = WFServerTransaction
+    CLIENT_SUBTRANSACTION_CLASS = WFSimpleSubClientTransaction
+    DEFAULT_BROWSER_CLASS = DefaultBrowser
+    NODE_MANAGER_CLASS = WFNodeManager
+
+    client_version = DEFAULT_WORKFLOWY_CLIENT_VERSION
+
+    def __init__(self, share_id=None, *, sessionid=None, username=None, password=None):
+        # XXX: SharedWorkflowy are required? or how to split shared and non-shared processing code.
+        self._inited = False
+
+        self.browser = self._init_browser()
+
+        # TODO: replace main_project to WFProject
+        #       but still wf.root are keep self.main_project's nodemgr's root!
+
+        self.globals = attrdict()
+        self.settings = attrdict()
+        self.project_tree = attrdict()
+        self.main_project = attrdict()
+        self.status = attrdict()
+        
+        self.current_transaction = None
+        self.transaction_lock = threading.RLock()
+
+        self.nodemgr = self.NODE_MANAGER_CLASS()
+        self.quota = WFQuota()
+
+        if sessionid is not None or username is not None:
+            username_or_sessionid = sessionid or username
+            self.login(username_or_sessionid, password)
+
+        self.init(share_id)
 
     def _reset(self):
         self.handle_reset()
@@ -142,6 +154,13 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
     def _init_browser(cls):
         return cls.DEFAULT_BROWSER_CLASS(DEFAULT_WORKFLOWY_URL)
 
+    def _login_failed(self):
+        self.inited = False
+        raise WFLoginError("Login Failure.")
+
+    def handle_logout(self, counter=0):
+        self._handle_logout(self, counter)
+
     def transaction(self, *, force_new_transaction=False):
         # TODO: how to handle force_new_transaction?
         with self.transaction_lock:
@@ -165,7 +184,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
                 errors = data.get("errors")
                 if errors:
                     # 'errors' or 'success'
-                    raise WFLoginError("Login Failure.")
+                    self._login_failed()
             else:
                 res, data = self.browser["accounts/login/"](username=username, password=password, next="", _raw=True)
                 home_content = data
@@ -200,23 +219,37 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
                 value = json.loads(value)
                 yield key, value
 
-    def _init(self, share_id=None, *, home_content=None):
+    def _get_initialization_data(self, share_id=None):
+        url = "get_initialization_data"
+        info = dict(
+            client_version=self.client_version,
+        )
+
+        if share_id is not None:
+            info.update(share_id=share_id)
+
         try:
-            url = "get_initialization_data"
-            info = dict(
-                client_version=self.client_version,
-            )
-
-            if share_id is not None:
-                info.update(share_id=share_id)
-
             res, data = self.browser["get_initialization_data"](_query=info)
         except HTTPError as e:
             if e.code == 404:
-                self.handle_logout()
+                raise WFLoginError
+            
+            raise
+        
+        return data
+        
+    def _init(self, share_id=None, *, home_content=None):
+        login_counter = 0
+        while login_counter < 3:
+            try:
+                data = self._get_initialization_data(share_id=share_id)
+            except WFLoginError as e:
+                self.handle_logout(login_counter)
+                login_counter += 1
             else:
-                # TODO: warp HTTPError? or in browser?
-                raise
+                break
+        else:
+            self._login_failed()
 
         if home_content is None:
             _, home_content = self.browser[""](_raw=True)
@@ -233,6 +266,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             root_project=self.main_project.pop("rootProject"),
             root_project_children=self.main_project.pop("rootProjectChildren"),
         )
+        
         self.handle_init()
         self.inited = True
 

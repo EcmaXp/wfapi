@@ -7,13 +7,14 @@ Features:
 
  - support deamon
  - search like website's keyword (`is:completed`)
+ - documentation release
+ - support embbeded node
 
 Not Yet:
 
  - cleanup changlog
  - cleanup readme
  - support all operation for deamon croller
- - support embbeded node
  - support shared node (by URL method only)
  - good logging system for track error
  - refresh project with keep node object
