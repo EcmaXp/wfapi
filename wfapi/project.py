@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 raise NotImplementedError
+from .quota import *
+from .nodemgr import *
 
 __all__ = ["WFBaseProject", "WFProject"]
 
-class WFBaseProject():
+class WFBaseProject(WFNodeManagerInterface):
     NODE_MANAGER_CLASS = NotImplemented
 
 # TODO: support auxiliaryProjectTreeInfos, mainProjectTreeInfo
@@ -17,7 +19,7 @@ class WFProject(WFBaseProject):
         self.status = attrdict()
         self.nodemgr = nodemgr
         #self.root = nodemgr.<new_root>?
-        self.quota = <DefaultQuotaClass>
+        self.quota = WFVoidQuota()
 
         self.update(project_info)
 
@@ -57,17 +59,6 @@ class WFProject(WFBaseProject):
         # TODO: dynamic status update by split by cap char
         # example) itemsCreatedInCurrentMonth -> items_created_in_current_month
 
-    def _quota_update(self):
-        status = self.status
-        quota = self.quota
-
-        if status.is_shared_quota:
-            quota.is_over = status.is_over_quota
-        else:
-            quota.used = status.items_created_in_current_month
-            quota.total = status.monthly_item_quota
-
-    # node operation are supported at this class?
     def __contains__(self, node):
         return node in self.nodemgr
 
@@ -77,14 +68,14 @@ class WFProject(WFBaseProject):
     def __iter__(self):
         return iter(self.nodemgr)
 
-    def add_node(self, node, update_child=True, update_quota=True):
-        added_nodes = self.nodemgr.add(node, update_child=update_child)
+    def add_node(self, node, recursion=True, update_quota=True):
+        added_nodes = self.nodemgr.add(node, recursion=recursion)
 
         if update_quota:
             self.quota += added_nodes
 
-    def remove_node(self, node, recursion_delete=False, update_quota=True):
-        removed_nodes = self.nodemgr.remove(node, recursion_delete=recursion_delete)
+    def remove_node(self, node, recursion=False, update_quota=True):
+        removed_nodes = self.nodemgr.remove(node, recursion=recursion)
 
         if update_quota:
             self.quota -= removed_nodes
@@ -94,7 +85,14 @@ class WFProject(WFBaseProject):
         return self.nodemgr.pretty_print
 
     def update_quota(self):
-        pass
+        status = self.status
+        quota = self.quota
+
+        if status.is_shared_quota:
+            quota.is_over = status.is_over_quota
+        else:
+            quota.used = status.items_created_in_current_month
+            quota.total = status.monthly_item_quota
     
     def update_by_status(self):
         self.project_tree.steal(data, "projectTreeData")
@@ -123,8 +121,13 @@ class WFProject(WFBaseProject):
         status.polling_interval = res.new_polling_interval_in_ms / 1000
 
         if status.is_shared_quota:
+            if not isinstance(self.quota, WFSharedQuota):
+                self.quota = WFSharedQuota()
             status.is_over_quota = res.over_quota
         else:
+            if not isinstance(self.quota, WFQuota):
+                self.quota = WFQuota()
+            
             status.items_created_in_current_month = \
                 res.items_created_in_current_month
             status.monthly_item_quota = res.monthly_item_quota

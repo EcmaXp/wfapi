@@ -3,7 +3,7 @@ from weakref import WeakValueDictionary
 from .node import WFNode
 from .settings import DEFAULT_ROOT_NODE_ID
 
-__all__ = ["WFBaseNodeManager", "WFNodeManager"]
+__all__ = ["WFBaseNodeManager", "WFNodeManager", "WFNodeManagerInterface"]
 
 
 class WFBaseNodeManager():
@@ -79,6 +79,8 @@ class WFNodeManager(WFBaseNodeManager):
         return self.NODE_CLASS.from_json(data, parent=parent)
 
     def add(self, node, update_child=True):
+        # TODO: rename update_child as resursion
+
         assert update_child is True
 
         added_nodes = 0
@@ -99,6 +101,8 @@ class WFNodeManager(WFBaseNodeManager):
         return added_nodes
 
     def remove(self, node, recursion_delete=True):
+        # TODO: rename recursion_delete as recursion
+        
         assert self.check_exist_node(node)
         if node.parent is not None:
             assert self.check_exist_node(node.parent)
@@ -142,3 +146,20 @@ class WFNodeManager(WFBaseNodeManager):
     @property
     def pretty_print(self):
         return self.root.pretty_print
+
+
+class WFNodeManagerInterface():
+    def __contains__(self, node):
+        raise NotImplementedError
+
+    def __getitem__(self, node):
+        raise NotImplementedError
+
+    def __iter__(self):
+        raise NotImplementedError
+
+    def add_node(self, node, recursion=True, update_quota=True):
+        raise NotImplementedError
+        
+    def remove_node(self, node, recursion=False, update_quota=True):
+        raise NotImplementedError

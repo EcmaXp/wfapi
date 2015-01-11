@@ -1,13 +1,33 @@
 # -*- coding: utf-8 -*-
 from .settings import DEFAULT_WORKFLOWY_MONTH_QUOTA
 from .exception import WFOverflowError
+from math import isinf
+
+__all__ = ["WFBaseQuota", "WFDefaultQuota", "WFProQuota", "WFVoidQuota", 
+    "WFSharedQuota"]
+
+INF = float('inf')
+assert isinf(INF)
+
 
 class WFBaseQuota():
+    def __init__(self):
+        raise NotImplementedError
+
     def is_full(self):
         return self.used >= self.total
 
     def is_overflow(self):
         return self.used > self.total
+
+    def is_underflow(self):
+        return self.used < 0
+        
+    def handle_modify(self):
+        if self.is_overflow():
+            self.handle_overflow()
+        elif self.is_underflow():
+            self.handle_underflow()
 
     def handle_overflow(self):
         # It's NOT OK.
@@ -19,27 +39,16 @@ class WFBaseQuota():
 
     def __iadd__(self, other):
         self.used += other
-        if self.is_overflow():
-            self.handle_overflow()
+        self.handle_modify()
         return self
 
     def __isub__(self, other):
         self.used -= other
-        if self.is_underflow():
-            self.handle_underflow()
+        self.handle_modify()
         return self
 
-    def is_full(self):
-        return self.used >= self.total
 
-    def is_overflow(self):
-        return self.used > self.total
-
-    def is_underflow(self):
-        return self.used < 0
-
-
-class WFQuota(WFBaseQuota):
+class WFDefaultQuota(WFBaseQuota):
     def __init__(self, used=0, total=DEFAULT_WORKFLOWY_MONTH_QUOTA):
         self.used = used
         self.total = total
@@ -52,12 +61,28 @@ class WFQuota(WFBaseQuota):
         raise WFOverflowError("monthly item quota reached.")
 
 
-class WFSharedQuota(WFBaseQuota):
-    MINIMAL = 0
-    MAXIMUM = float('inf')
+class WFProQuota(WFBaseQuota):
+    def __init__(self):
+        self.used = 0
+        self.total = INF
 
+    def handle_overflow(self):
+        pass
+
+
+class WFVoidQuota(WFBaseQuota):
+    def __init__(self):
+        self.used = INF
+        self.total = 0
+
+    def handle_overflow(self):
+        raise WFOverflowError("quota infomation are not inited.")
+
+
+class WFSharedQuota(WFBaseQuota):
     def __init__(self, is_over=False):
-        super().__init__(self.MINIMAL, self.MAXIMUM)
+        self.used = 0
+        self.total = INF
         self.is_over = is_over
 
     @property
@@ -66,7 +91,10 @@ class WFSharedQuota(WFBaseQuota):
 
     @is_over.setter
     def is_over(self, is_over):
-        self.used = self.MAXIMUM if is_over else self.MINIMAL
+        self.used = INF if is_over else 0
+
+    def is_overflow(self):
+        return self.is_over
 
     def handle_overflow(self):
         raise WFOverflowError("monthly item quota reached in shared view.")

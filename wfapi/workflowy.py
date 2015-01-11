@@ -13,7 +13,7 @@ from pprint import pprint
 from urllib.error import HTTPError # TODO: remove this
 from .transaction import WFClientTransaction, WFServerTransaction, \
     WFSimpleSubClientTransaction
-from .nodemgr import WFNodeManager
+from .nodemgr import WFNodeManager, WFNodeManagerInterface
 from .settings import DEFAULT_WORKFLOWY_CLIENT_VERSION, DEFAULT_WORKFLOWY_URL
 from .browser import DefaultBrowser
 from .operation import WFOperationCollection
@@ -24,7 +24,7 @@ from .utils import *
 __all__ = ["BaseWorkflowy", "Workflowy"]
 
 
-class BaseWorkflowy():
+class BaseWorkflowy(WFNodeManagerInterface):
     CLIENT_TRANSACTION_CLASS = NotImplemented
     SERVER_TRANSACTION_CLASS = NotImplemented
     CLIENT_SUBTRANSACTION_CLASS = NotImplemented
