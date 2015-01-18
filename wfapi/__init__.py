@@ -14,8 +14,8 @@ You can add node, edit, complete, or uncomplete, etc.
 __project_url__ = "http://github.com/sigsrv/wfapi"
 __author__ = "sigsrv (sigsrv@sigsrv.net)"
 
-__version__ = "0.2.5-alpha"
-# based on (github commit count - 22) in 0.2.x
+__version__ = "0.3.0-alpha"
+# based on (github commit count - ?) in 0.3.x
 # https://www.python.org/dev/peps/pep-0396/
 # http://semver.org/lang/ko/
 
@@ -23,7 +23,7 @@ __doc__ = __doc__.format_map(globals())
 __all__ = ["Workflowy"]
 
 from .workflowy import Workflowy
-from .features import *
+from .workflowy.features import *
 
 def _setup():
     for k, v in globals().items():

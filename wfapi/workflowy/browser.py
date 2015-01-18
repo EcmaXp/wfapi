@@ -10,6 +10,7 @@ from urllib.request import build_opener, HTTPCookieProcessor, Request, \
 import functools
 import json
 
+# TODO: browser to workflowy.browser or xxx.browser
 
 __all__ = ["DefaultBrowser", "BaseBrowser", "BuiltinBrowser", "FastBrowser"]
 
@@ -156,7 +157,12 @@ class FastBrowser(BaseBrowser):
         cookiejar.extract_cookies(res, req)
 
         # TODO: find reason why res.msg are equal with res.headers
-        res.msg = res.reason # FAILBACK
+        # TODO: how to clean this code? (remove legacy stuff)
+        # FAILBACK
+        res.msg = res.reason
+        # XXX remove random error
+        req.timeout = None
+        # or just use different error handler (like custom thing)
         self.error_handler.http_response(req, res)
 
         with closing(res) as fp:

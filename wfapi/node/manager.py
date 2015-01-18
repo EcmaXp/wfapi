@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from weakref import WeakValueDictionary
-from .node import WFNode
-from .settings import DEFAULT_ROOT_NODE_ID
+from . import WFNode
+from ..const import DEFAULT_ROOT_NODE_ID
 
 __all__ = ["WFBaseNodeManager", "WFNodeManager", "WFNodeManagerInterface"]
 
@@ -78,10 +78,8 @@ class WFNodeManager(WFBaseNodeManager):
     def new_node_from_json(self, data, parent=None):
         return self.NODE_CLASS.from_json(data, parent=parent)
 
-    def add(self, node, update_child=True):
-        # TODO: rename update_child as resursion
-
-        assert update_child is True
+    def add(self, node, recursion=True):
+        assert recursion is True
 
         added_nodes = 0
         def register_node(node):
@@ -90,7 +88,7 @@ class WFNodeManager(WFBaseNodeManager):
             added_nodes += 1
 
         register_node(node)
-        if update_child:
+        if recursion:
             def deep(node):
                 for subnode in node:
                     register_node(subnode)
@@ -100,9 +98,7 @@ class WFNodeManager(WFBaseNodeManager):
 
         return added_nodes
 
-    def remove(self, node, recursion_delete=True):
-        # TODO: rename recursion_delete as recursion
-        
+    def remove(self, node, recursion=True):
         assert self.check_exist_node(node)
         if node.parent is not None:
             assert self.check_exist_node(node.parent)
@@ -117,7 +113,7 @@ class WFNodeManager(WFBaseNodeManager):
             removed_nodes += 1
 
         unregister_node(node)
-        if recursion_delete:
+        if recursion:
             def deep(node):
                 if not node:
                     return
@@ -140,7 +136,7 @@ class WFNodeManager(WFBaseNodeManager):
 
         root_project.update(ch=root_project_children)
         root = self.new_node_from_json(root_project)
-        self.add(root, update_child=True)
+        self.add(root, recursion=True)
         return root
 
     @property

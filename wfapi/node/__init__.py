@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import copy
 import sys
-from . import utils as _utils
-from .settings import DEFAULT_ROOT_NODE_ID
+from .. import utils as _utils
+from ..const import DEFAULT_ROOT_NODE_ID
 import uuid
 
 
@@ -13,6 +13,12 @@ class WFRawNode():
     # TODO: add 'as' attribute for embbedded node!
     # FORMAT IS {"as":"hBYC5FQsDC","lm":2044727,"id":"c1e46ee6-53b1-4999-b65b-f11131afbaa0","nm":""}
     # MEAN MUST GIVE wf argument for new_node! OMG!!!
+
+    # TODO: determine how to store value 
+    #  id : UUID
+    #  lm|cp : wfstamp (or pystamp)
+    #  shared : JSON data or WFSharedInfo
+    #  parent : must be WFNode (NOT RawNode)
 
     __slots__  = ["id", "lm", "nm", "ch", "no", "cp", "shared", "parent"]
     default_value = dict(lm=0, nm="", ch=None, no="", cp=None, shared=None, parent=None)
@@ -113,8 +119,12 @@ class WFRawNode():
     #    self.parent = parent
 
 
+class WFExtraRawNode(WFRawNode):
+    __slots__ = ["extra"]
+
+
 class WFNode():
-    __slots__  = ["raw", "__weakref__"]
+    __slots__ = ["raw", "__weakref__"]
 
     # TODO: how to control slot info?
     slots = ["projectid", "last_modified", "name", "children", "description", "completed_at", "shared", "parent"]
@@ -302,7 +312,8 @@ class WFNode():
 class WF_WeakNode(WFNode):
     __slots__ = []
     
-    # virtual attribute: _wf
+    # virtual attribute
+    _wf = NotImplemented
 
     def __getattr__(self, item):
         if not item.startswith("_") and item in dir(WFOperationCollection):

@@ -6,7 +6,7 @@ def main():
         pass
 
     wf = WeakWorkflowy("hBYC5FQsDC")
-
+    
     with wf.transaction():
         if not wf.root:
             node = wf.root.create()

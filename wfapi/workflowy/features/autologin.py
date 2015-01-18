@@ -5,8 +5,8 @@ import warnings
 import random
 import threading
 from collections import namedtuple
-from ..workflowy import BaseWorkflowy
-from ..exception import WFUnsupportedFeature
+from .. import BaseWorkflowy
+from ...error import WFUnsupportedFeature
 
 __all__ = ["WFMixinAutoLogin"]
 

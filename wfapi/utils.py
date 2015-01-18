@@ -3,9 +3,11 @@ import os
 import uuid
 import random
 import string
+from pprint import pprint
 from contextlib import contextmanager
 
-__all__ = []
+# TODO: remove pprint from other code.
+__all__ = ["pprint"]
 
 def allplus(obj):
     __all__.append(obj.__name__)
@@ -40,6 +42,7 @@ class attrdict(dict):
         value = obj[key]
         del obj[key]
         self.update(value)
+# TODO: KEEP attrdict? or add safe() for getting key safety
 
 @allplus
 def generate_tid():

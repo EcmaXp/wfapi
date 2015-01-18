@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import warnings
-from ..settings import FEATURE_XXX_PRO_USER as _FEATURE_XXX_PRO_USER
+from ..const import FEATURE_XXX_PRO_USER as _FEATURE_XXX_PRO_USER
 from . import OPERATION_REGISTERED
 
 __all__ = ["WFOperation"]
@@ -328,7 +328,7 @@ class WF_DeleteOperation(WFOperation):
             assert node in self.parent
             self.parent.children.remove(node)
 
-        tr.wf.remove_node(node, recursion_delete=True)
+        tr.wf.remove_node(node, recursion=True)
 
     def get_operation_data(self, tr):
         return dict(
@@ -480,7 +480,7 @@ class WF_BulkCreateOperation(WFOperation):
 
     def post_operation(self, tr):
         self.parent.insert(self.starting_priority, self.project_trees)
-        tr.wf.add_node(self.project_trees, update_child=True)
+        tr.wf.add_node(self.project_trees, recursion=True)
 
     def get_operation_data(self, tr):
         return dict(

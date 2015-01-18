@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-from ..exception import WFUnsupportedFeature as _WFUnsupportedFeature
+from ...error import WFUnsupportedFeature as _WFUnsupportedFeature
+
+# TODO: renamve 
 
 from .deamon import *
 from .weak import *

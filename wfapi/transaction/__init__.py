@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-from . import utils as _utils
+from .. import utils
 import time
 
+__all__ = ["WFBaseTransaction", "WFServerTransaction", "WFClientTransaction",
+    "WFSimpleSubClientTransaction", "WFDeamonSubClientTransaction"]
 
 # TODO: Transaction must support splited projects!
 
@@ -113,7 +115,7 @@ class WFClientTransaction(WFBaseTransaction):
         super().__init__(*args, **kwargs)
         self.tid = self.generate_tid()
 
-    generate_tid = staticmethod(_utils.generate_tid)
+    generate_tid = staticmethod(utils.generate_tid)
 
     def get_client_timestamp(self, current_time=None):
         if current_time is None:
@@ -165,7 +167,6 @@ class WFClientTransaction(WFBaseTransaction):
 
             if self.wf.current_transaction is self:
                 self.wf.current_transaction = None
-
 
 class WFSimpleSubClientTransaction(WFClientTransaction):
     def __init__(self, wf, tr):

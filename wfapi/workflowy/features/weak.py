@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 import functools
-from ..node import WFNode
-from ..nodemgr import WFNodeManager
-from ..workflowy import BaseWorkflowy
-from ..operation import WFOperationCollection
+from .. import BaseWorkflowy
+from ...node import WFNode
+from ...node.manager import WFNodeManager
+from ...operation import WFOperationCollection
 
 
 __all__ = ["WFMixinWeak"]

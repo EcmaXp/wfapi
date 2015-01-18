@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-from .settings import DEFAULT_WORKFLOWY_MONTH_QUOTA
-from .exception import WFOverflowError
+from ..const import DEFAULT_WORKFLOWY_MONTH_QUOTA
+from ..error import WFOverflowError
 from math import isinf
 
 __all__ = ["WFBaseQuota", "WFDefaultQuota", "WFProQuota", "WFVoidQuota", 

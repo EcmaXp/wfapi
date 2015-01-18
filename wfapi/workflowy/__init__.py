@@ -9,17 +9,17 @@ import re
 import json
 import threading
 from contextlib import contextmanager
-from pprint import pprint
 from urllib.error import HTTPError # TODO: remove this
-from .transaction import WFClientTransaction, WFServerTransaction, \
-    WFSimpleSubClientTransaction
-from .nodemgr import WFNodeManager, WFNodeManagerInterface
-from .settings import DEFAULT_WORKFLOWY_CLIENT_VERSION, DEFAULT_WORKFLOWY_URL
 from .browser import DefaultBrowser
-from .operation import WFOperationCollection
-from .exception import WFLoginError
-from .quota import *
-from .utils import *
+from .internal import get_globals_from_home
+from ..project.quota import *
+from ..const import DEFAULT_WORKFLOWY_CLIENT_VERSION, DEFAULT_WORKFLOWY_URL
+from ..transaction import WFClientTransaction, WFServerTransaction, \
+    WFSimpleSubClientTransaction
+from ..node.manager import WFNodeManager, WFNodeManagerInterface
+from ..operation import WFOperationCollection
+from ..error import *
+from ..utils import *
 
 __all__ = ["BaseWorkflowy", "Workflowy"]
 
@@ -37,7 +37,8 @@ class BaseWorkflowy(WFNodeManagerInterface):
     def transaction(self):
         raise NotImplementedError
 
-    # smart handler
+    # smart handler?
+    # TODO: change handle method
     @contextmanager
     def smart_handle_init(self):
         try:
@@ -98,7 +99,6 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
     client_version = DEFAULT_WORKFLOWY_CLIENT_VERSION
 
     def __init__(self, share_id=None, *, sessionid=None, username=None, password=None):
-        # XXX: SharedWorkflowy are required? or how to split shared and non-shared processing code.
         self._inited = False
 
         self.browser = self._init_browser()
@@ -110,13 +110,18 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         self.settings = attrdict()
         self.project_tree = attrdict()
         self.main_project = attrdict()
+        #self.projects = None
         self.status = attrdict()
         
+        # will be removed from Workflowy, but moved to WFProject (eg. shared view)
         self.current_transaction = None
         self.transaction_lock = threading.RLock()
 
+        # will be removed from Workflowy, but moved to WFProject
         self.nodemgr = self.NODE_MANAGER_CLASS()
-        self.quota = WFQuota()
+        
+        # will be removed from Workflowy, but moved to WFProject
+        self.quota = WFVoidQuota()
 
         if sessionid is not None or username is not None:
             username_or_sessionid = sessionid or username
@@ -163,6 +168,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
     def transaction(self, *, force_new_transaction=False):
         # TODO: how to handle force_new_transaction?
+        # TODO: how to split handle for projects?
         with self.transaction_lock:
             if self.current_transaction is None:
                 self.current_transaction = self.CLIENT_TRANSACTION_CLASS(self)
@@ -191,33 +197,6 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
         if auto_init:
             return self.init(home_content=home_content)
-
-    _SCRIPT_TAG_REGEX = re.compile("".join([
-        re.escape('<script type="text/javascript">'), "(.*?)", re.escape('</script>'),
-    ]), re.DOTALL)
-
-    _SCRIPT_VAR_REGEX = re.compile("".join([
-        re.escape("var "), "(.*?)", re.escape(" = "), "(.*?|\{.*?\})", re.escape(";"), '$',
-    ]), re.DOTALL | re.MULTILINE)
-
-    @classmethod
-    def _get_globals_by_home(cls, content):
-        for source in cls._SCRIPT_TAG_REGEX.findall(content):
-            if "(" in source:
-                # function call found while parsing.
-                continue
-
-            for key, value in cls._SCRIPT_VAR_REGEX.findall(source):
-                if value.startswith("'") and value.endswith("'"):
-                    assert '"' not in value
-                    value = '"{}"'.format(value[+1:-1])
-
-                if key == "FIRST_LOAD_FLAGS" or key == "SETTINGS":
-                    # TODO: non-standard json parse by demjson?
-                    continue
-
-                value = json.loads(value)
-                yield key, value
 
     def _get_initialization_data(self, share_id=None):
         url = "get_initialization_data"
@@ -253,14 +232,19 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
         if home_content is None:
             _, home_content = self.browser[""](_raw=True)
-        self.globals.update(self._get_globals_by_home(home_content))
+        self.globals.update(get_globals_from_home(home_content))
 
         data = attrdict(data)
         self.globals.update(data.globals)
         self.settings.update(data.settings)
         # TODO: support auxiliaryProjectTreeInfos for embbed node.
+        # self.projects.import_sub_project?
         self.project_tree.steal(data, "projectTreeData")
         self.main_project.steal(self.project_tree, "mainProjectTreeInfo")
+        # self.projects.import_main_project?
+        # self.projects = self.PROJECT_MANAGER_CLASS(self.project_tree?, OR
+        #    mainProjectTreeInfo, auxiliaryProjectTreeInfos?)
+        
         self._status_update_by_main_project()
         self.nodemgr.update_root(
             root_project=self.main_project.pop("rootProject"),
@@ -294,8 +278,10 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         status.is_shared_quota = "overQuota" in mp
 
         if status.is_shared_quota:
+            self.quota = WFSharedQuota()
             status.is_over_quota = mp.overQuota
         else:
+            self.quota = WFDefaultQuota()
             status.items_created_in_current_month = mp.itemsCreatedInCurrentMonth
             status.monthly_item_quota = mp.monthlyItemQuota
 
@@ -311,7 +297,6 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             quota.used = status.items_created_in_current_month
             quota.total = status.monthly_item_quota
 
-
     def __contains__(self, node):
         return node in self.nodemgr
 
@@ -321,14 +306,14 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
     def __iter__(self):
         return iter(self.nodemgr)
 
-    def add_node(self, node, update_child=True, update_quota=True):
-        added_nodes = self.nodemgr.add(node, update_child=update_child)
+    def add_node(self, node, recursion=True, update_quota=True):
+        added_nodes = self.nodemgr.add(node, recursion=recursion)
 
         if update_quota:
             self.quota += added_nodes
 
-    def remove_node(self, node, recursion_delete=False, update_quota=True):
-        removed_nodes = self.nodemgr.remove(node, recursion_delete=recursion_delete)
+    def remove_node(self, node, recursion=False, update_quota=True):
+        removed_nodes = self.nodemgr.remove(node, recursion=recursion)
 
         if update_quota:
             self.quota -= removed_nodes

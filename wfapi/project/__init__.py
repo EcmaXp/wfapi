@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-raise NotImplementedError
+#raise NotImplementedError
 from .quota import *
-from .nodemgr import *
+from ..node.manager import *
 
 __all__ = ["WFBaseProject", "WFProject"]
 
@@ -11,6 +11,7 @@ class WFBaseProject(WFNodeManagerInterface):
 # TODO: support auxiliaryProjectTreeInfos, mainProjectTreeInfo
 #       in technical, auxiliaryProjectTreeInfo == mainProjectTreeInfo
 # TODO: not only shared node. but also main project.
+# TODO: embedded support in here, and node's support are in node.embedded
 
 class WFProject(WFBaseProject):
     NODE_MANAGER_CLASS = WFNodeManager
@@ -147,6 +148,6 @@ class WFProject(WFBaseProject):
 
         raise NotImplementedError
     
-    def <transaction>(self):
-        # execute transaction...
-        pass
+    #def <transaction>(self):
+    #    # execute transaction...
+    #    pass
