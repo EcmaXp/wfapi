@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 from .operations import *
 
-__all__ = ["WFOperationCollection"]
+__all__ = ["OperationCollection"]
 
-class WFOperationCollection():
+class OperationCollection():
     # TODO: add unsupported operation. (move, etc.)
 
     def edit(self, node, name=None, description=None):
         with self.transaction() as tr:
-            tr += WF_EditOperation(node, name, description)
+            tr += _EditOperation(node, name, description)
 
     def create(self, parent, priority=-1, *, node=None):
         priority_range = range(len(parent) + 1)
@@ -20,7 +20,7 @@ class WFOperationCollection():
 
         node = self.nodemgr.new_void_node() if node is None else node
         with self.transaction() as tr:
-            tr += WF_CreateOperation(parent, node, priority)
+            tr += _CreateOperation(parent, node, priority)
 
         return node
 
@@ -28,16 +28,16 @@ class WFOperationCollection():
         with self.transaction() as tr:
             if client_timestamp is None:
                 client_timestamp = tr.get_client_timestamp()
-            tr += WF_CompleteOperation(node, client_timestamp)
+            tr += _CompleteOperation(node, client_timestamp)
         return client_timestamp
 
     def uncomplete(self, node):
         with self.transaction() as tr:
-            tr += WF_UncompleteOperation(node)
+            tr += _UncompleteOperation(node)
 
     def delete(self, node):
         with self.transaction() as tr:
-            tr += WF_DeleteOperation(node)
+            tr += _DeleteOperation(node)
 
     def search(self, node, pattern):
         # pattern is very complex.

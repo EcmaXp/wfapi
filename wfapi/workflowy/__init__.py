@@ -14,17 +14,17 @@ from .browser import DefaultBrowser
 from .internal import get_globals_from_home
 from ..project.quota import *
 from ..const import DEFAULT_WORKFLOWY_CLIENT_VERSION, DEFAULT_WORKFLOWY_URL
-from ..transaction import WFClientTransaction, WFServerTransaction, \
-    WFSimpleSubClientTransaction
-from ..node.manager import WFNodeManager, WFNodeManagerInterface
-from ..operation import WFOperationCollection
+from ..transaction import ClientTransaction, ServerTransaction, \
+    SimpleSubClientTransaction
+from ..node.manager import NodeManager, NodeManagerInterface
+from ..operation import OperationCollection
 from ..error import *
 from ..utils import *
 
 __all__ = ["BaseWorkflowy", "Workflowy"]
 
 
-class BaseWorkflowy(WFNodeManagerInterface):
+class BaseWorkflowy(NodeManagerInterface):
     CLIENT_TRANSACTION_CLASS = NotImplemented
     SERVER_TRANSACTION_CLASS = NotImplemented
     CLIENT_SUBTRANSACTION_CLASS = NotImplemented
@@ -89,12 +89,12 @@ class BaseWorkflowy(WFNodeManagerInterface):
             self._inited = False
 
 
-class Workflowy(BaseWorkflowy, WFOperationCollection):
-    CLIENT_TRANSACTION_CLASS = WFClientTransaction
-    SERVER_TRANSACTION_CLASS = WFServerTransaction
-    CLIENT_SUBTRANSACTION_CLASS = WFSimpleSubClientTransaction
+class Workflowy(BaseWorkflowy, OperationCollection):
+    CLIENT_TRANSACTION_CLASS = ClientTransaction
+    SERVER_TRANSACTION_CLASS = ServerTransaction
+    CLIENT_SUBTRANSACTION_CLASS = SimpleSubClientTransaction
     DEFAULT_BROWSER_CLASS = DefaultBrowser
-    NODE_MANAGER_CLASS = WFNodeManager
+    NODE_MANAGER_CLASS = NodeManager
 
     client_version = DEFAULT_WORKFLOWY_CLIENT_VERSION
 
@@ -103,7 +103,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
         self.browser = self._init_browser()
 
-        # TODO: replace main_project to WFProject
+        # TODO: replace main_project to Project
         #       but still wf.root are keep self.main_project's nodemgr's root!
 
         self.globals = attrdict()
@@ -111,17 +111,19 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         self.project_tree = attrdict()
         self.main_project = attrdict()
         #self.projects = None
+        
+        # TODO: status are owned by main_project, but that's not good! remove soon.
         self.status = attrdict()
         
-        # will be removed from Workflowy, but moved to WFProject (eg. shared view)
+        # TODO: will be removed from Workflowy, but moved to Project (eg. shared view)
         self.current_transaction = None
         self.transaction_lock = threading.RLock()
 
-        # will be removed from Workflowy, but moved to WFProject
+        # TODO: will be removed from Workflowy, but moved to Project
         self.nodemgr = self.NODE_MANAGER_CLASS()
         
-        # will be removed from Workflowy, but moved to WFProject
-        self.quota = WFVoidQuota()
+        # TODO: will be removed from Workflowy, but moved to Project
+        self.quota = VoidQuota()
 
         if sessionid is not None or username is not None:
             username_or_sessionid = sessionid or username
@@ -142,7 +144,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         self.current_transaction = None
 
         self.nodemgr.clear()
-        self.quota = WFQuota()
+        self.quota = Quota()
 
     def print_status(self):
         rvar = dict(
@@ -278,10 +280,10 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         status.is_shared_quota = "overQuota" in mp
 
         if status.is_shared_quota:
-            self.quota = WFSharedQuota()
+            self.quota = SharedQuota()
             status.is_over_quota = mp.overQuota
         else:
-            self.quota = WFDefaultQuota()
+            self.quota = DefaultQuota()
             status.items_created_in_current_month = mp.itemsCreatedInCurrentMonth
             status.monthly_item_quota = mp.monthlyItemQuota
 
@@ -349,7 +351,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         )
 
         if self.status.share_type is not None:
-            # how to merge code with WFClientTransaction.get_transaction_json()
+            # how to merge code with ClientTransaction.get_transaction_json()
             assert self.status.share_type == "url"
             arguments.update(share_id=self.status.share_id)
 

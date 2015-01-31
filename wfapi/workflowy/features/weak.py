@@ -1,20 +1,20 @@
 # -*- coding: utf-8 -*-
 import functools
 from .. import BaseWorkflowy
-from ...node import WFNode
-from ...node.manager import WFNodeManager
-from ...operation import WFOperationCollection
+from ...node import Node
+from ...node.manager import NodeManager
+from ...operation import OperationCollection
 
 
 __all__ = ["WFMixinWeak"]
 
-class WF_WeakNode(WFNode):
+class _WeakNode(Node):
     __slots__ = []
     
     # virtual attribute: _wf
 
     def __getattr__(self, item):
-        if not item.startswith("_") and item in dir(WFOperationCollection):
+        if not item.startswith("_") and item in dir(OperationCollection):
             return functools.partial(getattr(self._wf, item), self)
         
         raise AttributeError(item)
@@ -50,12 +50,12 @@ class WF_WeakNode(WFNode):
     # ??
 
 
-    @WFNode.name.setter
+    @Node.name.setter
     def name(self, name):
         self.edit(name, None)
         self.raw.nm = name
 
-    @WFNode.description.setter
+    @Node.description.setter
     def description(self, description):
         self.edit(None, description)
         self.raw.no = description
@@ -71,7 +71,7 @@ class WF_WeakNode(WFNode):
         completed_at = self.complete(completed_at)
         self.raw.cp = completed_at
 
-    @WFNode.completed_at.setter
+    @Node.completed_at.setter
     def is_completed(self, is_completed):
         if is_completed:
             self.raw.cp = self.complete()
@@ -88,15 +88,15 @@ class WFMixinWeak(BaseWorkflowy):
     NODE_MANAGER_CLASS = NotImplemented
 
     def __init__(self, *args, **kwargs):
-        # WF_WeakNode.define_with_workflowy()
-        # WFNodeManager.define_with_nodecls()
+        # _WeakNode.define_with_workflowy()
+        # NodeManager.define_with_nodecls()
         
-        class _WFNode_(WF_WeakNode):
+        class _Node_(_WeakNode):
             __slots__ = []
             _wf = self
 
-        class WFDynamicNodeManager(WFNodeManager):
-            NODE_CLASS = _WFNode_
+        class WFDynamicNodeManager(NodeManager):
+            NODE_CLASS = _Node_
 
         self.NODE_MANAGER_CLASS = WFDynamicNodeManager
         super().__init__(*args, **kwargs)

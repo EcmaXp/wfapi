@@ -1,5 +1,4 @@
 import time
-raise NotImplementedError
 
 # TODO: move timestamp to utils.timestamp or etc.
 
@@ -10,8 +9,7 @@ def py2wftime(t, joined):
 
 def cutminute(t, joined):
     # py to py but remove second infomation
-    # return (t - joined) // 60 * 60?
-    raise NotImplementedError
+    return t - ((t - joined) % 60)
 
 def wf2pytime(t, joined):
     # TODO: check by docstring, and check vaild

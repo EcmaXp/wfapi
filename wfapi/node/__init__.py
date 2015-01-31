@@ -9,7 +9,7 @@ import uuid
 def _raise_found_node_parent(self, node):
     raise WFNodeError("Already parent found.")
 
-class WFRawNode():
+class RawNode():
     # TODO: add 'as' attribute for embbedded node!
     # FORMAT IS {"as":"hBYC5FQsDC","lm":2044727,"id":"c1e46ee6-53b1-4999-b65b-f11131afbaa0","nm":""}
     # MEAN MUST GIVE wf argument for new_node! OMG!!!
@@ -18,7 +18,7 @@ class WFRawNode():
     #  id : UUID
     #  lm|cp : wfstamp (or pystamp)
     #  shared : JSON data or WFSharedInfo
-    #  parent : must be WFNode (NOT RawNode)
+    #  parent : must be Node (NOT RawNode)
 
     __slots__  = ["id", "lm", "nm", "ch", "no", "cp", "shared", "parent"]
     default_value = dict(lm=0, nm="", ch=None, no="", cp=None, shared=None, parent=None)
@@ -115,15 +115,15 @@ class WFRawNode():
     #    # TODO: check isinstance with shared
     #    self.shared = shared
     #def set_parent(self, parent):
-    #    assert isinstance(parent, WFNode) or parent is None, parent
+    #    assert isinstance(parent, Node) or parent is None, parent
     #    self.parent = parent
 
 
-class WFExtraRawNode(WFRawNode):
+class ExtraRawNode(RawNode):
     __slots__ = ["extra"]
 
 
-class WFNode():
+class Node():
     __slots__ = ["raw", "__weakref__"]
 
     # TODO: how to control slot info?
@@ -143,10 +143,10 @@ class WFNode():
 
     def __init__(self, projectid, last_modified=0, name="", children=None, \
                  description="", completed_at=None, shared=None, parent=None):
-        if isinstance(projectid, WFRawNode):
+        if isinstance(projectid, RawNode):
             self.raw = projectid
         else:
-            self.raw = WFRawNode.from_node_init(self, dict(
+            self.raw = RawNode.from_node_init(self, dict(
                 id=projectid, # UUID-like str or DEFAULT_ROOT_NODE_ID("None")
                 lm=last_modified, # Last modified by minute (- @joined)
                 nm=name, # Name
@@ -295,7 +295,7 @@ class WFNode():
                 new_ch.append(child)
             data["ch"] = new_ch
 
-        info = WFRawNode.from_vaild_json(data)
+        info = RawNode.from_vaild_json(data)
         info.parent = parent
         return cls(info)
 
@@ -309,24 +309,24 @@ class WFNode():
     generate_uuid = staticmethod(_utils.generate_uuid)
 
 
-class WF_WeakNode(WFNode):
+class _WeakNode(Node):
     __slots__ = []
     
     # virtual attribute
     _wf = NotImplemented
 
     def __getattr__(self, item):
-        if not item.startswith("_") and item in dir(WFOperationCollection):
+        if not item.startswith("_") and item in dir(OperationCollection):
             return functools.partial(getattr(self._wf, item), self)
 
         raise AttributeError(item)
 
-    @WFNode.name.setter
+    @Node.name.setter
     def name(self, name):
         self.edit(name, None)
         self.raw.nm = name
 
-    @WFNode.description.setter
+    @Node.description.setter
     def description(self, description):
         self.edit(None, description)
         self.raw.no = description
@@ -342,7 +342,7 @@ class WF_WeakNode(WFNode):
         completed_at = self.complete(completed_at)
         self.raw.cp = completed_at
 
-    @WFNode.completed_at.setter
+    @Node.completed_at.setter
     def is_completed(self, is_completed):
         if is_completed:
             self.raw.cp = self.complete()
@@ -355,6 +355,6 @@ class WF_WeakNode(WFNode):
     #def shared(self):
     #    return self.raw.shared
 
-#class WFOperationEngine():
+#class OperationEngine():
 #    "Use yield for operation, and undo?"
 #    pass

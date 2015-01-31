@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-class WFProjectReload(BaseException):
+class ProjectReload(BaseException):
     pass
 
 

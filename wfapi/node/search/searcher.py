@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 
-class WFBaseSearcher():
+class BaseSearcher():
     pass
 
 
-class WFDefaultSearcher(WFBaseSearcher):
+class WFDefaultSearcher(BaseSearcher):
     # check document_view.js:9876
     def __init__(self, pattern):
         self.pattern = pattern
         
 
-class WFSpecialSearcher(WFBaseSearcher):
+class WFSpecialSearcher(BaseSearcher):
     pass

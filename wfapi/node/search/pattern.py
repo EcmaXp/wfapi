@@ -3,6 +3,6 @@ import re
 
 # TODO: support search by workflowy's keyword
 
-class WFBasePattern():
+class BasePattern():
     pass
 

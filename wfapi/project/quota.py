@@ -3,14 +3,14 @@ from ..const import DEFAULT_WORKFLOWY_MONTH_QUOTA
 from ..error import WFOverflowError
 from math import isinf
 
-__all__ = ["WFBaseQuota", "WFDefaultQuota", "WFProQuota", "WFVoidQuota", 
-    "WFSharedQuota"]
+__all__ = ["BaseQuota", "DefaultQuota", "ProQuota", "VoidQuota", 
+    "SharedQuota"]
 
 INF = float('inf')
 assert isinf(INF)
 
 
-class WFBaseQuota():
+class BaseQuota():
     def __init__(self):
         raise NotImplementedError
 
@@ -48,7 +48,7 @@ class WFBaseQuota():
         return self
 
 
-class WFDefaultQuota(WFBaseQuota):
+class DefaultQuota(BaseQuota):
     def __init__(self, used=0, total=DEFAULT_WORKFLOWY_MONTH_QUOTA):
         self.used = used
         self.total = total
@@ -61,7 +61,7 @@ class WFDefaultQuota(WFBaseQuota):
         raise WFOverflowError("monthly item quota reached.")
 
 
-class WFProQuota(WFBaseQuota):
+class ProQuota(BaseQuota):
     def __init__(self):
         self.used = 0
         self.total = INF
@@ -70,7 +70,7 @@ class WFProQuota(WFBaseQuota):
         pass
 
 
-class WFVoidQuota(WFBaseQuota):
+class VoidQuota(BaseQuota):
     def __init__(self):
         self.used = INF
         self.total = 0
@@ -79,7 +79,7 @@ class WFVoidQuota(WFBaseQuota):
         raise WFOverflowError("quota infomation are not inited.")
 
 
-class WFSharedQuota(WFBaseQuota):
+class SharedQuota(BaseQuota):
     def __init__(self, is_over=False):
         self.used = 0
         self.total = INF

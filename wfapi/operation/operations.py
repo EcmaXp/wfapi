@@ -3,10 +3,10 @@ import warnings
 from ..const import FEATURE_XXX_PRO_USER as _FEATURE_XXX_PRO_USER
 from . import OPERATION_REGISTERED
 
-__all__ = ["WFOperation"]
+__all__ = ["Operation"]
 
 
-class WFOperation():
+class Operation():
     operation_name = NotImplemented
     _cached = None
 
@@ -20,7 +20,7 @@ class WFOperation():
 
     def __repr__(self):
         # const name?
-        return "<WFOperation: %s; %r>" % (self.operation_name, vars(self))
+        return "<Operation: %s; %r>" % (self.operation_name, vars(self))
 
     def pre_operation(self, tr):
         pass
@@ -125,10 +125,10 @@ class WFOperation():
 
         return operation
 
-_register_operation = WFOperation._register
+_register_operation = Operation._register
 
 
-class _WFUnknownOperation(WFOperation):
+class _UnknownOperation(Operation):
     operation_name = "_unknown"
 
     def __init__(self, op):
@@ -143,7 +143,7 @@ class _WFUnknownOperation(WFOperation):
         return self.op.data
 
     def __repr__(self):
-        return "<_WFUnknownOperation: %s; %r>" % (self.operation_name, self.data)
+        return "<_UnknownOperation: %s; %r>" % (self.operation_name, self.data)
 
     def pre_operation(self, tr):
         pass
@@ -175,7 +175,7 @@ class _WFUnknownOperation(WFOperation):
 
 
 @_register_operation
-class WF_EditOperation(WFOperation):
+class _EditOperation(Operation):
     operation_name = 'edit'
 
     def __init__(self, node, name=None, description=None):
@@ -214,7 +214,7 @@ class WF_EditOperation(WFOperation):
 
 
 @_register_operation
-class WF_CreateOperation(WFOperation):
+class _CreateOperation(Operation):
     operation_name = 'create'
 
     def __init__(self, parent, node, priority):
@@ -253,7 +253,7 @@ class WF_CreateOperation(WFOperation):
         return cls(parent, node, priority)
 
 
-class _WF_CompleteNodeOperation(WFOperation):
+class __CompleteNodeOperation(Operation):
     operation_name = NotImplemented
 
     def pre_operation(self, tr):
@@ -278,7 +278,7 @@ class _WF_CompleteNodeOperation(WFOperation):
 
 
 @_register_operation
-class WF_CompleteOperation(_WF_CompleteNodeOperation):
+class _CompleteOperation(__CompleteNodeOperation):
     operation_name = 'complete'
 
     def __init__(self, node, modified=None):
@@ -298,7 +298,7 @@ class WF_CompleteOperation(_WF_CompleteNodeOperation):
 
 
 @_register_operation
-class WF_UncompleteOperation(_WF_CompleteNodeOperation):
+class _UncompleteOperation(__CompleteNodeOperation):
     operation_name = 'uncomplete'
 
     def __init__(self, node):
@@ -310,7 +310,7 @@ class WF_UncompleteOperation(_WF_CompleteNodeOperation):
 
 
 @_register_operation
-class WF_DeleteOperation(WFOperation):
+class _DeleteOperation(Operation):
     operation_name = 'delete'
 
     def __init__(self, node):
@@ -343,7 +343,7 @@ class WF_DeleteOperation(WFOperation):
 
 
 @_register_operation
-class WF_UndeleteOperation(WFOperation):
+class _UndeleteOperation(Operation):
     operation_name = 'undelete'
 
     def __init__(self):
@@ -351,7 +351,7 @@ class WF_UndeleteOperation(WFOperation):
 
 
 @_register_operation
-class WF_MoveOperation(WFOperation):
+class _MoveOperation(Operation):
     operation_name = 'move'
 
     def __init__(self, parent, node, priority):
@@ -402,7 +402,7 @@ class WF_MoveOperation(WFOperation):
 
 
 # @_register_operation
-class WF_ShareOperation(WFOperation):
+class _ShareOperation(Operation):
     operation_name = 'share'
     NotImplemented
 
@@ -439,7 +439,7 @@ class WF_ShareOperation(WFOperation):
             )
 
 @_register_operation
-class WF_UnshareOperation(WFOperation):
+class _UnshareOperation(Operation):
     operation_name = 'unshare'
 
     def __init__(self, node):
@@ -458,7 +458,7 @@ class WF_UnshareOperation(WFOperation):
             projectid=self.node.projectid,
         )
 
-    get_undo_data = WF_ShareOperation.get_undo_data
+    get_undo_data = _ShareOperation.get_undo_data
 
     @classmethod
     def from_server_operation(cls, tr, node):
@@ -466,7 +466,7 @@ class WF_UnshareOperation(WFOperation):
 
 
 @_register_operation
-class WF_BulkCreateOperation(WFOperation):
+class _BulkCreateOperation(Operation):
     operation_name = 'bulk_create'
     # This operation does add node (with many child) at one times.
 
@@ -506,31 +506,31 @@ class WF_BulkCreateOperation(WFOperation):
 
 
 # @_register_operation
-class WF_BulkMoveOperation(WFOperation):
+class _BulkMoveOperation(Operation):
     operation_name = 'bulk_move'
     NotImplemented
 
 
 if _FEATURE_XXX_PRO_USER:
     @_register_operation
-    class WF_AddSharedEmailOperation(WFOperation):
+    class _AddSharedEmailOperation(Operation):
         operation_name = 'add_shared_email'
         NotImplemented
 
 
     @_register_operation
-    class WF_RemoveSharedEmailOperation(WFOperation):
+    class _RemoveSharedEmailOperation(Operation):
         operation_name = 'remove_shared_email'
         NotImplemented
 
 
     @_register_operation
-    class WF_RegisterSharedEmailUserOperation(WFOperation):
+    class _RegisterSharedEmailUserOperation(Operation):
         operation_name = 'register_shared_email_user'
         NotImplemented
 
 
     @_register_operation
-    class WF_MakeSharedSubtreePlaceholderOperation(WFOperation):
+    class _MakeSharedSubtreePlaceholderOperation(Operation):
         operation_name = 'make_shared_subtree_placeholder'
         NotImplemented

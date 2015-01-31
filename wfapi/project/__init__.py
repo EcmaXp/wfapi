@@ -3,9 +3,9 @@
 from .quota import *
 from ..node.manager import *
 
-__all__ = ["WFBaseProject", "WFProject"]
+__all__ = ["BaseProject", "Project"]
 
-class WFBaseProject(WFNodeManagerInterface):
+class BaseProject(NodeManagerInterface):
     NODE_MANAGER_CLASS = NotImplemented
 
 # TODO: support auxiliaryProjectTreeInfos, mainProjectTreeInfo
@@ -13,14 +13,14 @@ class WFBaseProject(WFNodeManagerInterface):
 # TODO: not only shared node. but also main project.
 # TODO: embedded support in here, and node's support are in node.embedded
 
-class WFProject(WFBaseProject):
-    NODE_MANAGER_CLASS = WFNodeManager
+class Project(BaseProject):
+    NODE_MANAGER_CLASS = NodeManager
     
     def __init__(self, project_info):
         self.status = attrdict()
         self.nodemgr = nodemgr
         #self.root = nodemgr.<new_root>?
-        self.quota = WFVoidQuota()
+        self.quota = VoidQuota()
 
         self.update(project_info)
 
@@ -122,12 +122,12 @@ class WFProject(WFBaseProject):
         status.polling_interval = res.new_polling_interval_in_ms / 1000
 
         if status.is_shared_quota:
-            if not isinstance(self.quota, WFSharedQuota):
-                self.quota = WFSharedQuota()
+            if not isinstance(self.quota, SharedQuota):
+                self.quota = SharedQuota()
             status.is_over_quota = res.over_quota
         else:
-            if not isinstance(self.quota, WFQuota):
-                self.quota = WFQuota()
+            if not isinstance(self.quota, Quota):
+                self.quota = Quota()
             
             status.items_created_in_current_month = \
                 res.items_created_in_current_month

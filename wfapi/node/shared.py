@@ -5,15 +5,15 @@ import enum #?
 # TODO: move shared to node.shared or node.shared_info
 
 
-class WFBaseSharedInfo():
+class BaseSharedInfo():
     pass
 
-class WFSharedImfo(WFBaseSharedInfo):
+class SharedInfo(BaseSharedInfo):
     @classmethod
     def from_json(cls, data):
         pass
 
-class WFURLSharedInfo(WFBaseSharedInfo):
+class URLSharedInfo(BaseSharedInfo):
     __slots__ = []
 
     def __init__(self, shared_info):

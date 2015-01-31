@@ -2,12 +2,12 @@
 from .. import utils
 import time
 
-__all__ = ["WFBaseTransaction", "WFServerTransaction", "WFClientTransaction",
-    "WFSimpleSubClientTransaction", "WFDeamonSubClientTransaction"]
+__all__ = ["BaseTransaction", "ServerTransaction", "ClientTransaction",
+    "SimpleSubClientTransaction", "DeamonSubClientTransaction"]
 
 # TODO: Transaction must support splited projects!
 
-class WFBaseTransaction():
+class BaseTransaction():
     is_executed = False
 
     def __init__(self, wf):
@@ -51,7 +51,7 @@ class WFBaseTransaction():
         raise NotImplementedError
 
 
-class WFServerTransaction(WFBaseTransaction):
+class ServerTransaction(BaseTransaction):
     def __init__(self, wf, client_tr, client_timestamp):
         super().__init__(wf)
         self.client_timestamp = client_timestamp
@@ -81,7 +81,7 @@ class WFServerTransaction(WFBaseTransaction):
                 continue
 
             # TODO: change OPERATOR_COLLECTION?
-            operator = OPERATOR_COLLECTION.get(op["type"], _WFUnknownOperation)
+            operator = OPERATOR_COLLECTION.get(op["type"], _UnknownOperation)
             operation = operator.from_server_operation_json(self, op)
             self.push(operation)
 
@@ -110,7 +110,7 @@ class WFServerTransaction(WFBaseTransaction):
             self.is_executed = True
 
 
-class WFClientTransaction(WFBaseTransaction):
+class ClientTransaction(BaseTransaction):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tid = self.generate_tid()
@@ -168,7 +168,7 @@ class WFClientTransaction(WFBaseTransaction):
             if self.wf.current_transaction is self:
                 self.wf.current_transaction = None
 
-class WFSimpleSubClientTransaction(WFClientTransaction):
+class SimpleSubClientTransaction(ClientTransaction):
     def __init__(self, wf, tr):
         self.wf = wf
         self.tr = tr
@@ -182,6 +182,6 @@ class WFSimpleSubClientTransaction(WFClientTransaction):
         assert not self.tr.is_executed
 
 
-class WFDeamonSubClientTransaction(WFSimpleSubClientTransaction):
+class DeamonSubClientTransaction(SimpleSubClientTransaction):
     # TODO: Really need it?
     pass

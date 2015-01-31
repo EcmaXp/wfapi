@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 from weakref import WeakValueDictionary
-from . import WFNode
+from . import Node
 from ..const import DEFAULT_ROOT_NODE_ID
 
-__all__ = ["WFBaseNodeManager", "WFNodeManager", "WFNodeManagerInterface"]
+__all__ = ["BaseNodeManager", "NodeManager", "NodeManagerInterface"]
 
 
-class WFBaseNodeManager():
+class BaseNodeManager():
     NODE_CLASS = NotImplemented
 
 
-class WFNodeManager(WFBaseNodeManager):
-    NODE_CLASS = WFNode
+class NodeManager(BaseNodeManager):
+    NODE_CLASS = Node
 
     def __init__(self):
         super().__init__()
@@ -144,7 +144,7 @@ class WFNodeManager(WFBaseNodeManager):
         return self.root.pretty_print
 
 
-class WFNodeManagerInterface():
+class NodeManagerInterface():
     def __contains__(self, node):
         raise NotImplementedError
 

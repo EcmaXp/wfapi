@@ -3,18 +3,18 @@ import queue
 import threading
 import time
 from .. import BaseWorkflowy
-from ...transaction import WFSimpleSubClientTransaction
+from ...transaction import SimpleSubClientTransaction
 
 __all__ = ["WFMixinDeamon"]
 
 
-class WFDeamonSubClientTransaction(WFSimpleSubClientTransaction):
+class DeamonSubClientTransaction(SimpleSubClientTransaction):
     # TODO: Really need it?
     pass
 
 
 class WFMixinDeamon(BaseWorkflowy):
-    CLIENT_SUBTRANSACTION_CLASS = WFDeamonSubClientTransaction
+    CLIENT_SUBTRANSACTION_CLASS = DeamonSubClientTransaction
     # TODO: new subtransaction class are push operation at commit time.
 
     def __init__(self, *args, **kwargs):
