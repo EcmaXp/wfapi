@@ -2,63 +2,80 @@
 #raise NotImplementedError
 from .quota import *
 from ..node.manager import *
+from ..utils import uncapdict, uncapword, attrdict
+import re
 
 __all__ = ["BaseProject", "Project"]
 
 class BaseProject(NodeManagerInterface):
     NODE_MANAGER_CLASS = NotImplemented
+    
+    def __init__(self, ptree, *, pm):
+        raise NotImplementedError
+
 
 # TODO: support auxiliaryProjectTreeInfos, mainProjectTreeInfo
 #       in technical, auxiliaryProjectTreeInfo == mainProjectTreeInfo
 # TODO: not only shared node. but also main project.
 # TODO: embedded support in here, and node's support are in node.embedded
 
+
 class Project(BaseProject):
     NODE_MANAGER_CLASS = NodeManager
     
-    def __init__(self, project_info):
+    def __init__(self, ptree, *, pm):
         self.status = attrdict()
-        self.nodemgr = nodemgr
-        #self.root = nodemgr.<new_root>?
+        self.nodemgr = self.NODE_MANAGER_CLASS()
         self.quota = VoidQuota()
+        self.pm = pm
+        self.init(ptree)
 
-        self.update(project_info)
+    @property
+    def wf(self):
+        return self.pm.wf
 
     @property
     def root(self):
         return self.nodemgr.root
 
-    def update_by_init(self, project_info):
+    def init(self, ptree):
         # TODO: support auxiliaryProjectTreeInfos for embbed node.
         s = self.status
-        p = project_info
+        s.update(uncapdict(ptree))
+        from pprint import pprint
+        pprint(s)
+        
+        if None:
+            s.most_recent_operation_transaction_id
+            s.date_joined_timestamp_in_seconds
+            s.polling_interval
+            
+            # TODO: support is_readonly attribute!
+            s.is_read_only
+            
+            s.date_joined_timestamp_in_seconds
+            s.items_created_in_current_month
 
-        s.most_recent_operation_transaction_id = p.initialMostRecentOperationTransactionId
-        s.date_joined_timestamp_in_seconds = p.dateJoinedTimestampInSeconds
-        s.polling_interval = p.initialPollingIntervalInMs / 1000
+        s.most_recent_operation_transaction_id = \
+            s.initial_most_recent_operation_transaction_id
+        del s.initial_most_recent_operation_transaction_id
+        
+        s.polling_interval = \
+            s.initial_polling_interval_in_ms / 1000
+        del s.initial_polling_interval_in_ms
+        
+        s.is_shared = s.get("share_type") is not None
+        
+        self.quota = (SharedQuota if s.get("over_quota") else DefaultQuota)()
+        self.quota.update(s)
 
-        # TODO: support is_readonly attribute!
-        s.is_readonly = p.isReadOnly
-
-        if p.get("shareType"):
-            s.share_type = p.shareType
-            s.share_id = p.shareId
-        else:
-            s.share_type = None
-            s.share_id = None
-
-        # project_info also contains overQuota if shared.
-        s.is_shared_quota = "overQuota" in p
-        # refrash quota class
-
-        if s.is_shared_quota:
-            s.is_over_quota = p.overQuota
-        else:
-            s.items_created_in_current_month = p.itemsCreatedInCurrentMonth
-            s.monthly_item_quota = p.monthlyItemQuota
-
-        # TODO: dynamic status update by split by cap char
-        # example) itemsCreatedInCurrentMonth -> items_created_in_current_month
+        self.nodemgr.update_root(
+            s.root_project,
+            s.root_project_children,
+        )
+        
+        del s.root_project
+        del s.root_project_children
 
     def __contains__(self, node):
         return node in self.nodemgr
@@ -84,56 +101,23 @@ class Project(BaseProject):
     @property
     def pretty_print(self):
         return self.nodemgr.pretty_print
-
-    def update_quota(self):
-        status = self.status
-        quota = self.quota
-
-        if status.is_shared_quota:
-            quota.is_over = status.is_over_quota
-        else:
-            quota.used = status.items_created_in_current_month
-            quota.total = status.monthly_item_quota
-    
-    def update_by_status(self):
-        self.project_tree.steal(data, "projectTreeData")
-        self.main_project.steal(self.project_tree, "mainProjectTreeInfo")
-        self._status_update_by_main_project()
-        self.nodemgr.update_root(
-            root_project=self.main_project.pop("rootProject"),
-            root_project_children=self.main_project.pop("rootProjectChildren"),
-        )
     
     def update_by_pushpoll(self, res):
-        #error = res.get("error")
-        #if error:
-        #    raise WFRuntimeError(error)
-        # already handled by workflowy's <split_update_from_pushpoll>
-
-        status = self.status
-        status.most_recent_operation_transaction_id = \
+        # like workflowy.update_by_pushpollsub
+        error = res.get("error")
+        if error:
+            raise WFRuntimeError(error)
+        
+        s = self.status
+        s.most_recent_operation_transaction_id = \
             res.new_most_recent_operation_transaction_id
 
         if res.get("need_refreshed_project_tree"):
-            raise NotImplementedError
             self._refresh_project_tree()
             # XXX how to execute operation after refresh project tree? no idea.
 
-        status.polling_interval = res.new_polling_interval_in_ms / 1000
-
-        if status.is_shared_quota:
-            if not isinstance(self.quota, SharedQuota):
-                self.quota = SharedQuota()
-            status.is_over_quota = res.over_quota
-        else:
-            if not isinstance(self.quota, Quota):
-                self.quota = Quota()
-            
-            status.items_created_in_current_month = \
-                res.items_created_in_current_month
-            status.monthly_item_quota = res.monthly_item_quota
-
-        self._quota_update()
+        s.polling_interval = res.new_polling_interval_in_ms / 1000
+        self.quota.update(res)
 
         data = json.loads(res.server_run_operation_transaction_json)
         return data
@@ -148,6 +132,5 @@ class Project(BaseProject):
 
         raise NotImplementedError
     
-    #def <transaction>(self):
-    #    # execute transaction...
-    #    pass
+    def transaction(self):
+        return self.wf.new_transaction(self)

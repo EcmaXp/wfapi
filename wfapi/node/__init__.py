@@ -225,16 +225,6 @@ class Node():
             parent = vif(raw.parent, "...", None),
         )
 
-    def copy(self):
-        # TODO: support fast copy by copy module?
-        return type(self).from_json(self.to_json(), parent=self.parent)
-
-    def insert(self, index, node):
-        if node.parent is not None:
-            _raise_found_node_parent(node)
-
-        self.children.insert(index, node)
-        node.raw.parent = self
 
     def __bool__(self):
         return len(self) > 0
@@ -262,6 +252,33 @@ class Node():
                 raise IndexError(item)
 
         return ch[item]
+
+    def copy(self):
+        # TODO: support fast copy by copy module?
+        return type(self).from_json(self.to_json(), parent=self.parent)
+
+    def insert(self, index, node):
+        if node.parent is not None:
+            _raise_found_node_parent(node)
+
+        self.children.insert(index, node)
+        node.raw.parent = self
+
+    def walk(self):
+        childs = list(self)
+
+        yield self, childs
+        
+        for child in childs:
+            for x in child.walk():
+                yield x
+
+    def fastwalk(self):
+        yield self
+        
+        for child in self:
+            for x in child.fastwalk():
+                yield x
 
     def pretty_print(self, *, stream=None, indent=0):
         if stream is None:

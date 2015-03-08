@@ -7,17 +7,24 @@ from urllib.error import HTTPError
 from urllib.parse import urljoin, urlencode, urlparse
 from urllib.request import build_opener, HTTPCookieProcessor, Request, \
     HTTPErrorProcessor
+from .. import const
 import functools
 import json
 
-# TODO: browser to workflowy.browser or xxx.browser
+assert const.DEFAULT_WORKFLOWY_URL
 
 __all__ = ["DefaultBrowser", "BaseBrowser", "BuiltinBrowser", "FastBrowser"]
 
 
+def get_default_workflowy_url(base_url):
+    if base_url is None:
+        return const.DEFAULT_WORKFLOWY_URL
+
+    return base_url
+
 class BaseBrowser():
-    def __init__(self, base_url):
-        self.base_url = base_url
+    def __init__(self, base_url=None):
+        self.base_url = get_default_workflowy_url(base_url)
 
     def open(self, url, *, _raw=False, _query=None, **kwargs):
         raise NotImplementedError
@@ -34,7 +41,8 @@ class BaseBrowser():
 
 
 class BuiltinBrowser(BaseBrowser):
-    def __init__(self, base_url):
+    def __init__(self, base_url=None):
+        base_url = get_default_workflowy_url(base_url)
         super().__init__(base_url)
         self.cookie_jar = CookieJar()
         self.opener = build_opener(HTTPCookieProcessor(self.cookie_jar))
@@ -90,8 +98,10 @@ class BuiltinBrowser(BaseBrowser):
 
 
 class FastBrowser(BaseBrowser):
-    def __init__(self, base_url):
+    def __init__(self, base_url=None):
+        base_url = get_default_workflowy_url(base_url)
         super().__init__(base_url)
+        
         parsed = urlparse(base_url)
 
         conn_class = {

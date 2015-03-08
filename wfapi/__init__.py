@@ -14,8 +14,8 @@ You can add node, edit, complete, or uncomplete, etc.
 __project_url__ = "http://github.com/sigsrv/wfapi"
 __author__ = "sigsrv (sigsrv@sigsrv.net)"
 
-__version__ = "0.3.0-alpha"
-# based on (github commit count - ?) in 0.3.x
+__version__ = "0.3.1-alpha"
+# based on (github commit count - 26) in 0.3.x
 # https://www.python.org/dev/peps/pep-0396/
 # http://semver.org/lang/ko/
 

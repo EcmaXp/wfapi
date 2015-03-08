@@ -3,8 +3,7 @@ from ..const import DEFAULT_WORKFLOWY_MONTH_QUOTA
 from ..error import WFOverflowError
 from math import isinf
 
-__all__ = ["BaseQuota", "DefaultQuota", "ProQuota", "VoidQuota", 
-    "SharedQuota"]
+__all__ = ["BaseQuota", "DefaultQuota", "ProQuota", "VoidQuota", "SharedQuota"]
 
 INF = float('inf')
 assert isinf(INF)
@@ -37,6 +36,9 @@ class BaseQuota():
         # It's OK.
         pass
 
+    def update(self, status):
+        pass
+
     def __iadd__(self, other):
         self.used += other
         self.handle_modify()
@@ -53,9 +55,9 @@ class DefaultQuota(BaseQuota):
         self.used = used
         self.total = total
 
-    @classmethod
-    def from_main_project(cls, info):
-        return cls(info["itemsCreatedInCurrentMonth"], info["monthlyItemQuota"])
+    def update(self, status):
+        self.used = status.items_created_in_current_month
+        self.total = status.monthly_item_quota
 
     def handle_overflow(self):
         raise WFOverflowError("monthly item quota reached.")
@@ -84,6 +86,9 @@ class SharedQuota(BaseQuota):
         self.used = 0
         self.total = INF
         self.is_over = is_over
+
+    def update(self, status):
+        self.is_over = status.over_quota
 
     @property
     def is_over(self):

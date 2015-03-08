@@ -12,7 +12,11 @@ class WFUnsupportedFeature(WFError):
     pass
 
 
-class WFRuntimeError(Exception):
+class WFRuntimeError(WFError):
+    pass
+
+
+class WFTransactionError(WFError):
     pass
 
 

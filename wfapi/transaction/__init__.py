@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from .. import utils
+from ..error import WFTransactionError
 import time
 
 __all__ = ["BaseTransaction", "ServerTransaction", "ClientTransaction",
@@ -8,11 +9,22 @@ __all__ = ["BaseTransaction", "ServerTransaction", "ClientTransaction",
 # TODO: Transaction must support splited projects!
 
 class BaseTransaction():
-    is_executed = False
+    __slots__ = ["wf", "operations", "is_locked", "is_executed"]
 
     def __init__(self, wf):
-        self.operations = []
         self.wf = wf
+        self.operations = []
+        self.is_executed = False
+        self.is_locked = False
+
+    def assert_pushable(self, operation=None):
+        if not self.is_locked:
+            return
+
+        if operation is None:
+            raise WFTransactionError("{!r} is locked".format(self))
+        else:
+            raise WFTransactionError("{!r} is locked, while push {!r}".format(self, operation))
 
     def get_client_timestamp(self, current_time=None):
         raise NotImplementedError
@@ -28,6 +40,13 @@ class BaseTransaction():
         for operation in self:
             operation.post_operation(self)
 
+    def handle_enter(self):
+        pass
+    
+    def handle_exit(self, error):
+        self.is_locked = True
+        self.commit()
+
     def __iter__(self):
         return iter(self.operations)
 
@@ -35,13 +54,15 @@ class BaseTransaction():
         self.push(other)
 
     def __enter__(self):
+        self.handle_enter()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
+            self.handle_exit(error=True)
             return False
-
-        self.commit()
+        else:
+            self.handle_exit(error=False)
         return False
 
     def commit(self):
@@ -51,16 +72,29 @@ class BaseTransaction():
         raise NotImplementedError
 
 
-class ServerTransaction(BaseTransaction):
-    def __init__(self, wf, client_tr, client_timestamp):
+class ProjectBasedTransaction(BaseTransaction):
+    __slots__ = ["project"]
+    
+    def __init__(self, wf, project):
         super().__init__(wf)
+        self.project = project
+
+    def handle_exit(self, error):
+        self.is_locked = True
+        if not self.is_executed:
+            self.commit()
+            self.is_executed = True
+
+class ServerTransaction(ProjectBasedTransaction):
+    def __init__(self, wf, project, client_tr, client_timestamp):
+        super().__init__(wf, project)
         self.client_timestamp = client_timestamp
         self.client_transaction = client_tr
 
     @classmethod
-    def from_server_operations(cls, wf, client_tr, data):
+    def from_server(cls, wf, project, client_tr, data):
         client_timestamp = data["client_timestamp"]
-        self = cls(wf, client_tr, client_timestamp)
+        self = cls(wf, project, client_tr, client_timestamp)
 
         client_operations = list(self.get_client_operations_json())
         def pop_client_operation():
@@ -98,34 +132,32 @@ class ServerTransaction(BaseTransaction):
         return self.client_timestamp
 
     def push(self, operation):
+        self.assert_pushable(operation)
         self.operations.append(operation)
 
     def commit(self):
-        with self.wf.transaction_lock:
-            if self.is_executed:
-                return
-
-            self.pre_operation()
-            self.post_operation()
-            self.is_executed = True
+        self.pre_operation()
+        self.post_operation()
 
 
-class ClientTransaction(BaseTransaction):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.tid = self.generate_tid()
-
-    generate_tid = staticmethod(utils.generate_tid)
-
+class ClientTransaction(ProjectBasedTransaction):
+    def __init__(self, wf, project):
+        super().__init__(wf, project)
+        self.level = 0
+    
     def get_client_timestamp(self, current_time=None):
         if current_time is None:
             current_time = time.time()
 
-        return (current_time - self.wf.status.date_joined_timestamp_in_seconds) // 60
+        pstatus = self.project.status
+        # TODO: use workflowy.timestamp!
+        return (current_time - pstatus.date_joined_timestamp_in_seconds) // 60
 
     def push(self, operation):
         # TODO: determine good position for pre_operation and post_operation
         # XXX: if pre_operation and post_operation in push_poll function, transaction are not work.
+        self.assert_pushable(operation)
+
         operation.pre_operation(self)
         self.operations.append(operation)
         operation.post_operation(self)
@@ -138,35 +170,39 @@ class ClientTransaction(BaseTransaction):
         return operations
 
     def get_transaction_json(self, operations=None):
+        pstatus = self.project.status
+        
         if operations is None:
             operations = self.get_operations_json()
 
         transaction = dict(
-            most_recent_operation_transaction_id=self.wf.status.most_recent_operation_transaction_id,
+            most_recent_operation_transaction_id = 
+                pstatus.most_recent_operation_transaction_id,
             operations=operations,
         )
-
-        # TODO: move shared project process code.
-        status = self.wf.status
-        if status.share_type is not None:
-            assert status.share_type == "url"
-            share_id = status.share_id
+        
+        if pstatus.is_shared:
+            assert pstatus.share_type == "url"
             transaction.update(
-                share_id=share_id,
+                share_id=pstatus.share_id,
             )
 
-        return [transaction]
+        return transaction
+
+    def handle_enter(self):
+        self.level += 1
+
+    def handle_exit(self, error):
+        self.level -= 1
+        if self.level == 0:
+            if self.is_executed:
+                raise WFTransactionError("{!r} is already executed".format(self))
+
+            super().handle_exit(error)
 
     def commit(self):
-        with self.wf.transaction_lock:
-            if self.is_executed:
-                return
+        return self.get_transaction_json()
 
-            self.wf.execute_transaction(self)
-            self.is_committed = True
-
-            if self.wf.current_transaction is self:
-                self.wf.current_transaction = None
 
 class SimpleSubClientTransaction(ClientTransaction):
     def __init__(self, wf, tr):
