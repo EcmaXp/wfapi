@@ -11,6 +11,7 @@ class OperationCollection():
             tr += _EditOperation(node, name, description)
 
     def create(self, parent, priority=-1, *, node=None):
+        #import pdb; pdb.set_trace()
         priority_range = range(len(parent) + 1)
 
         try:
@@ -18,7 +19,7 @@ class OperationCollection():
         except IndexError:
             raise WFError("invalid priority are selected. (just use default value.)")
 
-        node = self.nodemgr.new_void_node() if node is None else node
+        node = parent.project.nodemgr.new_void_node() if node is None else node
         with self.transaction() as tr:
             tr += _CreateOperation(parent, node, priority)
 

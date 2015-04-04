@@ -11,6 +11,7 @@ class BaseSharedInfo():
 class SharedInfo(BaseSharedInfo):
     @classmethod
     def from_json(cls, data):
+        # TODO: also implement with from_json_with_project?
         pass
 
 class URLSharedInfo(BaseSharedInfo):

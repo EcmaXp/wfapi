@@ -3,6 +3,8 @@ import functools
 from .. import BaseWorkflowy
 from ...node import Node
 from ...node.manager import NodeManager
+from ...project import Project
+from ...project.manager import ProjectManager
 from ...operation import OperationCollection
 
 
@@ -85,18 +87,22 @@ class _WeakNode(Node):
     #    return self.raw.shared
 
 class WFMixinWeak(BaseWorkflowy):
-    NODE_MANAGER_CLASS = NotImplemented
+    PROJECT_MANAGER_CLASS = NotImplemented
 
     def __init__(self, *args, **kwargs):
-        # _WeakNode.define_with_workflowy()
-        # NodeManager.define_with_nodecls()
-        
         class _Node_(_WeakNode):
             __slots__ = []
             _wf = self
 
-        class WFDynamicNodeManager(NodeManager):
+        class DynamicNodeManager(NodeManager):
             NODE_CLASS = _Node_
 
-        self.NODE_MANAGER_CLASS = WFDynamicNodeManager
+        class DynamicProject(Project):
+            NODE_MANAGER_CLASS = DynamicNodeManager
+
+        class DynamicProjectManager(ProjectManager):
+            MAIN_PROJECT_CLASS = DynamicProject
+            PROJECT_CLASS = DynamicProject
+
+        self.PROJECT_MANAGER_CLASS = DynamicProjectManager
         super().__init__(*args, **kwargs)

@@ -184,7 +184,7 @@ class _EditOperation(Operation):
         self.description = description
 
     def pre_operation(self, tr):
-        assert tr.wf.nodemgr.check_exist_node(self.node)
+        assert tr.project.nodemgr.check_exist_node(self.node)
 
     def post_operation(self, tr):
         rawnode = self.node.raw
@@ -223,7 +223,7 @@ class _CreateOperation(Operation):
         self.priority = priority
 
     def pre_operation(self, tr):
-        assert tr.wf.nodemgr.check_not_exist_node(self.node)
+        assert tr.project.nodemgr.check_not_exist_node(self.node)
 
     def post_operation(self, tr):
         self.parent.insert(self.priority, self.node)

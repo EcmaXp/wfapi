@@ -19,16 +19,20 @@ class RawNode():
     #  lm|cp : wfstamp (or pystamp)
     #  shared : JSON data or WFSharedInfo
     #  parent : must be Node (NOT RawNode)
+    #  project : Project instance for node
+    #           (it is not object binded value, class binded)
 
     __slots__  = ["id", "lm", "nm", "ch", "no", "cp", "shared", "parent"]
+    project = None
+    
     default_value = dict(lm=0, nm="", ch=None, no="", cp=None, shared=None, parent=None)
 
     def __setattr__(self, key, value):
-        alter_key = "set_{}".format(key)
+        alter_key = "filter_{}".format(key)
         if hasattr(self, alter_key):
-            getattr(self, alter_key)(value)
-        else:
-            super().__setattr__(key, value)
+            value = getattr(self, alter_key)(value)
+
+        super().__setattr__(key, value)
 
     @classmethod
     def from_vaild_json(cls, info):
@@ -54,11 +58,11 @@ class RawNode():
         setattr_node = super(cls, self).__setattr__
         for key, value in info.items():
             alter_key = slot_map.get(key)
-            setter = getattr(self, "set_{}".format(alter_key), None)
-            if alter_key and setter is not None:
-                setter(value)
-            else:
-                setattr_node(key, value)
+            value_filter = getattr(self, "filter_{}".format(alter_key), None)
+            if alter_key and value_filter is not None:
+                value = value_filter(value)
+            
+            setattr_node(key, value)
 
         return self
 
@@ -66,25 +70,25 @@ class RawNode():
         info = {}
         for key in self.__slots__:
             value = getattr(self, key)
-            info[k] = value
+            info[key] = value
 
         del info["parent"]
         return info
 
-    def set_projectid(self, projectid):
+    def filter_projectid(self, projectid):
         if isinstance(projectid, uuid.UUID):
             projectid = str(projectid)
 
-        self.id = projectid
+        return projectid
 
-    def set_last_modified(self, last_modified):
+    def filter_last_modified(self, last_modified):
         assert isinstance(last_modified, int)
-        self.lm = last_modified
+        return last_modified
 
-    def set_name(self, name):
-        self.nm = name
+    def filter_name(self, name):
+        return name
 
-    def set_children(self, childs):
+    def filter_children(self, childs):
         if hasattr(self, "ch"):
             # if already ch is exists, how to work?
             raise NotImplementedError
@@ -99,24 +103,39 @@ class RawNode():
                 child.parent = self
                 ch.append(child)
 
-    def set_description(self, description):
+    def filter_description(self, description):
         assert isinstance(description, str)
-        self.no = description
+        return description
 
-    def set_completed_at(self, at):
+    def filter_completed_at(self, at):
         if at is None:
-            self.cp = None
+            return None
         else:
             assert isinstance(at, (int, float))
-            self.cp = int(at)
+            return int(at)
+
+    @classmethod
+    def with_project(cls, project):
+        rcls = getattr(project, "_raw_node_class", None)
+        if rcls is None:
+            # TODO: rename this, and dynamic apply
+            class _UglyNode(cls):
+                pass
+            
+             # XXX [!] cycle reference
+            _UglyNode.project = project
+            rcls = project._raw_node_class = _UglyNode
+        
+        return rcls
 
     # XXX RuntimeError: maximum recursion depth exceeded
-    #def set_shared(self, shared):
-    #    # TODO: check isinstance with shared
-    #    self.shared = shared
-    #def set_parent(self, parent):
-    #    assert isinstance(parent, Node) or parent is None, parent
-    #    self.parent = parent
+    def filter_shared(self, shared):
+        # TODO: check isinstance with shared
+        return shared
+
+    def filter_parent(self, parent):
+        assert isinstance(parent, Node) or parent is None, parent
+        return parent
 
 
 class ExtraRawNode(RawNode):
@@ -127,8 +146,8 @@ class Node():
     __slots__ = ["raw", "__weakref__"]
 
     # TODO: how to control slot info?
-    slots = ["projectid", "last_modified", "name", "children", "description", "completed_at", "shared", "parent"]
-    virtual_slots = ["parentid", "is_completed"]
+    slots = ["project", "projectid", "last_modified", "name", "children", "description", "completed_at", "shared", "parent"]
+    virtual_slots = ["project", "parentid", "is_completed"]
 
     slot_map = dict(
         id="projectid",
@@ -141,12 +160,16 @@ class Node():
         parent="parent",
     )
 
-    def __init__(self, projectid, last_modified=0, name="", children=None, \
+    def __init__(self, projectid, project=None, last_modified=0, name="", children=None, \
                  description="", completed_at=None, shared=None, parent=None):
         if isinstance(projectid, RawNode):
             self.raw = projectid
         else:
-            self.raw = RawNode.from_node_init(self, dict(
+            from ..project import Project
+            if not isinstance(project, Project):
+                raise Exception("!")
+            
+            self.raw = RawNode.with_project(project).from_node_init(self, dict(
                 id=projectid, # UUID-like str or DEFAULT_ROOT_NODE_ID("None")
                 lm=last_modified, # Last modified by minute (- @joined)
                 nm=name, # Name
@@ -156,6 +179,7 @@ class Node():
                 shared=shared, # Shared infomation
                 parent=parent, # Parent node (or None)
             ))
+            print(self.raw.to_json())
 
     @property
     def projectid(self):
@@ -192,6 +216,10 @@ class Node():
             ch = self.raw.ch = []
 
         return ch
+
+    @property
+    def project(self):
+        return self.raw.project
 
     @property
     def parentid(self):
@@ -301,7 +329,7 @@ class Node():
             child.pretty_print(indent=indent)
 
     @classmethod
-    def from_json(cls, data, parent=None):
+    def _from_json(cls, data):
         data = data.copy()
 
         ch = data.get("ch")
@@ -312,7 +340,24 @@ class Node():
                 new_ch.append(child)
             data["ch"] = new_ch
 
+        return data
+
+    @classmethod
+    def from_json(cls, data, parent=None):
+        data = cls._from_json(data)
+        
+        import warnings
+        warnings.warn("from_json is deprecated (use from_json_with_project)")
+        
         info = RawNode.from_vaild_json(data)
+        info.parent = parent
+        return cls(info)
+        
+    @classmethod
+    def from_json_with_project(cls, data, *, project, parent=None):
+        data = cls._from_json(data)
+        
+        info = RawNode.with_project(project).from_vaild_json(data)
         info.parent = parent
         return cls(info)
 
@@ -320,8 +365,8 @@ class Node():
         return self.raw.to_json()
 
     @classmethod
-    def from_void(cls, uuid=None):
-        return cls(uuid or cls.generate_uuid())
+    def from_void(cls, uuid=None, project=None):
+        return cls(uuid or cls.generate_uuid(), project=project)
 
     generate_uuid = staticmethod(_utils.generate_uuid)
 

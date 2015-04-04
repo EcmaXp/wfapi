@@ -13,8 +13,10 @@ class BaseNodeManager():
 class NodeManager(BaseNodeManager):
     NODE_CLASS = Node
 
-    def __init__(self):
+    def __init__(self, project):
         super().__init__()
+        # XXX [!] cycle reference
+        self.project = project
         self.data = WeakValueDictionary()
         self.root = None
 
@@ -73,10 +75,10 @@ class NodeManager(BaseNodeManager):
         return True
 
     def new_void_node(self, uuid=None):
-        return self.NODE_CLASS.from_void(uuid)
+        return self.NODE_CLASS.from_void(uuid, project=self.project)
 
     def new_node_from_json(self, data, parent=None):
-        return self.NODE_CLASS.from_json(data, parent=parent)
+        return self.NODE_CLASS.from_json_with_project(data, parent=parent, project=self.project)
 
     def add(self, node, recursion=True):
         assert recursion is True
@@ -128,6 +130,7 @@ class NodeManager(BaseNodeManager):
         return removed_nodes
 
     def new_root_node(self, root_project, root_project_children):
+        # XXX [!] project is Project, root_project is root node. ?!
         if root_project is None:
             root_project = dict(id=DEFAULT_ROOT_NODE_ID)
         else:

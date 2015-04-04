@@ -25,7 +25,8 @@ class Project(BaseProject):
     
     def __init__(self, ptree, *, pm):
         self.status = attrdict()
-        self.nodemgr = self.NODE_MANAGER_CLASS()
+        # [!] Cycle reference
+        self.nodemgr = self.NODE_MANAGER_CLASS(self)
         self.quota = VoidQuota()
         self.pm = pm
         self.init(ptree)

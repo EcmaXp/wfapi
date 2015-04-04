@@ -21,6 +21,9 @@ __all__ = ["BaseWorkflowy", "Workflowy"]
 
 
 class BaseWorkflowy(NodeManagerInterface):
+    PROJECT_MANAGER_CLASS = NotImplemented
+    TRANSACTION_MANAGER_CLASS = NotImplemented
+
     def __init__(self):
         raise NotImplementedError
 
@@ -81,6 +84,8 @@ class BaseWorkflowy(NodeManagerInterface):
 
 class Workflowy(BaseWorkflowy, OperationCollection):
     client_version = DEFAULT_WORKFLOWY_CLIENT_VERSION
+    PROJECT_MANAGER_CLASS = ProjectManager
+    TRANSACTION_MANAGER_CLASS = TransactionManager
 
     def __init__(self, share_id=None, *, sessionid=None, username=None, password=None):
         self._inited = False
@@ -89,8 +94,8 @@ class Workflowy(BaseWorkflowy, OperationCollection):
         self.browser = DefaultBrowser()
         self.globals = attrdict()
         self.settings = attrdict()
-        self.pm = ProjectManager(self)
-        self.tm = TransactionManager(self)
+        self.pm = self.PROJECT_MANAGER_CLASS(self)
+        self.tm = self.TRANSACTION_MANAGER_CLASS(self)
 
         if sessionid is not None or username is not None:
             username_or_sessionid = sessionid or username
@@ -263,3 +268,10 @@ AttributeError: 'Node' object has no attribute 'create'"""
         logged_out = data.get("logged_out")
         if logged_out:
             raise WFLoginError("logout detected, don't share session with real user.")
+
+    def pretty_print(self):
+        print("main")
+        self.main.pretty_print()
+        
+        # TODO: support pretty_print with sub
+        print("[!] sub is not supported")
