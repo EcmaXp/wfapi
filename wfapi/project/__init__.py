@@ -43,9 +43,7 @@ class Project(BaseProject):
         # TODO: support auxiliaryProjectTreeInfos for embbed node.
         s = self.status
         s.update(uncapdict(ptree))
-        from pprint import pprint
-        pprint(s)
-        
+
         if None:
             s.most_recent_operation_transaction_id
             s.date_joined_timestamp_in_seconds
@@ -67,7 +65,7 @@ class Project(BaseProject):
         
         s.is_shared = s.get("share_type") is not None
         
-        self.quota = (SharedQuota if s.get("over_quota") else DefaultQuota)()
+        self.quota = (SharedQuota if "over_quota" in s else DefaultQuota)()
         self.quota.update(s)
 
         self.nodemgr.update_root(

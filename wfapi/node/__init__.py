@@ -3,7 +3,11 @@ import copy
 import sys
 from .. import utils as _utils
 from ..const import DEFAULT_ROOT_NODE_ID
+import weakref
 import uuid
+
+# XXX Check last line of this file!
+_Project = NotImplemented # Cycle import.
 
 
 def _raise_found_node_parent(self, node):
@@ -118,12 +122,8 @@ class RawNode():
     def with_project(cls, project):
         rcls = getattr(project, "_raw_node_class", None)
         if rcls is None:
-            # TODO: rename this, and dynamic apply
-            class _UglyNode(cls):
-                pass
-            
-             # XXX [!] cycle reference
-            _UglyNode.project = project
+            _UglyNode = type("{}<{!r}>".format(cls.__name__, project), (cls,), {})
+            _UglyNode.project = weakref.proxy(project)
             rcls = project._raw_node_class = _UglyNode
         
         return rcls
@@ -165,10 +165,8 @@ class Node():
         if isinstance(projectid, RawNode):
             self.raw = projectid
         else:
-            from ..project import Project
-            if not isinstance(project, Project):
-                raise Exception("!")
-            
+            assert isinstance(project, _Project)
+
             self.raw = RawNode.with_project(project).from_node_init(self, dict(
                 id=projectid, # UUID-like str or DEFAULT_ROOT_NODE_ID("None")
                 lm=last_modified, # Last modified by minute (- @joined)
@@ -179,7 +177,6 @@ class Node():
                 shared=shared, # Shared infomation
                 parent=parent, # Parent node (or None)
             ))
-            print(self.raw.to_json())
 
     @property
     def projectid(self):
@@ -327,35 +324,18 @@ class Node():
         indent += INDENT_SIZE
         for child in self:
             child.pretty_print(indent=indent)
-
+        
     @classmethod
-    def _from_json(cls, data):
+    def from_json_with_project(cls, data, *, project, parent=None):
         data = data.copy()
 
         ch = data.get("ch")
         if ch is not None:
             new_ch = []
             for child in ch:
-                child = cls.from_json(child)
+                child = cls.from_json_with_project(child, project=project)
                 new_ch.append(child)
             data["ch"] = new_ch
-
-        return data
-
-    @classmethod
-    def from_json(cls, data, parent=None):
-        data = cls._from_json(data)
-        
-        import warnings
-        warnings.warn("from_json is deprecated (use from_json_with_project)")
-        
-        info = RawNode.from_vaild_json(data)
-        info.parent = parent
-        return cls(info)
-        
-    @classmethod
-    def from_json_with_project(cls, data, *, project, parent=None):
-        data = cls._from_json(data)
         
         info = RawNode.with_project(project).from_vaild_json(data)
         info.parent = parent
@@ -420,3 +400,6 @@ class _WeakNode(Node):
 #class OperationEngine():
 #    "Use yield for operation, and undo?"
 #    pass
+
+# _Project are replaced at here!
+from ..project import Project as _Project

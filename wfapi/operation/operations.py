@@ -190,10 +190,10 @@ class _EditOperation(Operation):
         rawnode = self.node.raw
 
         if self.name is not None:
-            rawnode.name = self.name
+            rawnode.nm = self.name
 
         if self.description is not None:
-            rawnode.description = self.description
+            rawnode.no = self.description
 
     @classmethod
     def from_server_operation(cls, tr, node, name=None, description=None):
@@ -246,7 +246,7 @@ class _CreateOperation(Operation):
 
     @classmethod
     def from_server_operation(cls, tr, projectid, parentid, priority):
-        node = tr.wf.nodemgr.new_void_node(projectid)
+        node = tr.project.nodemgr.new_void_node(projectid)
         rawnode = node.raw
         rawnode.last_modified = tr.get_client_timestamp()
         parent = tr.wf[parentid]
@@ -257,7 +257,7 @@ class __CompleteNodeOperation(Operation):
     operation_name = NotImplemented
 
     def pre_operation(self, tr):
-        assert tr.wf.nodemgr.check_exist_node(self.node)
+        assert tr.project.nodemgr.check_exist_node(self.node)
 
     def post_operation(self, tr):
         self.node.completed_at
@@ -306,7 +306,7 @@ class _UncompleteOperation(__CompleteNodeOperation):
 
     def post_operation(self, tr):
         rawnode = self.node.raw
-        rawnode.completed_at = None
+        rawnode.cp = None
 
 
 @_register_operation
@@ -320,7 +320,7 @@ class _DeleteOperation(Operation):
         # TODO: more priority calc safety.
 
     def pre_operation(self, tr):
-        assert tr.wf.nodemgr.check_exist_node(self.node)
+        assert tr.project.nodemgr.check_exist_node(self.node)
 
     def post_operation(self, tr):
         node = self.node
@@ -360,7 +360,7 @@ class _MoveOperation(Operation):
         self.priority = priority
 
     def pre_operation(self, tr):
-        assert tr.wf.nodemgr.check_exist_node(self.node)
+        assert tr.project.nodemgr.check_exist_node(self.node)
         if self.node.parent is None:
             raise WFNodeError("{!r} don't have parent. (possible?)".format(self.node))
         elif self.node not in self.node.parent:
@@ -476,7 +476,7 @@ class _BulkCreateOperation(Operation):
         self.starting_priority = starting_priority
 
     def pre_operation(self, tr):
-        assert tr.wf.nodemgr.check_not_exist_node(self.project_trees)
+        assert tr.project.nodemgr.check_not_exist_node(self.project_trees)
 
     def post_operation(self, tr):
         self.parent.insert(self.starting_priority, self.project_trees)
@@ -501,7 +501,7 @@ class _BulkCreateOperation(Operation):
 
     @classmethod
     def from_server_operation(cls, tr, parent, project_trees, starting_priority):
-        project_trees = tr.wf.nodemgr.new_node_from_json(project_trees, parent=parent)
+        project_trees = tr.project.nodemgr.new_node_from_json(project_trees, parent=parent)
         return cls(parent, project_trees, starting_priority)
 
 

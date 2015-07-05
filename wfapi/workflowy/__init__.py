@@ -214,12 +214,6 @@ class Workflowy(BaseWorkflowy, OperationCollection):
         return self.tm.new_transaction(project)
 
     def new_transaction(self, project):
-        # TODO: remove
-        """Traceback (most recent call last):
-  File "./main.py", line 11, in <module>
-    node = wf.root.create()
-AttributeError: 'Node' object has no attribute 'create'"""
-
         return self.transaction(project)
 
     def _refresh_project_tree(self):
@@ -270,8 +264,11 @@ AttributeError: 'Node' object has no attribute 'create'"""
             raise WFLoginError("logout detected, don't share session with real user.")
 
     def pretty_print(self):
-        print("main")
         self.main.pretty_print()
         
-        # TODO: support pretty_print with sub
-        print("[!] sub is not supported")
+        # TODO: sub project?
+        for project in self.pm:
+            if self.main == project:
+                continue
+            
+            project.pretty_print()
