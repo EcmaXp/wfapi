@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from .. import utils
 from ..error import WFTransactionError
+import json
 import time
 
 __all__ = ["BaseTransaction", "ServerTransaction", "ClientTransaction",
@@ -93,6 +94,9 @@ class ServerTransaction(ProjectBasedTransaction):
 
     @classmethod
     def from_server(cls, wf, project, client_tr, data):
+        # TODO: find reason why wrapped?
+        data = json.loads(data.server_run_operation_transaction_json)
+
         client_timestamp = data["client_timestamp"]
         self = cls(wf, project, client_tr, client_timestamp)
 
@@ -141,8 +145,9 @@ class ServerTransaction(ProjectBasedTransaction):
 
 
 class ClientTransaction(ProjectBasedTransaction):
-    def __init__(self, wf, project):
+    def __init__(self, wf, tm, project):
         super().__init__(wf, project)
+        self.tm = tm
         self.level = 0
     
     def get_client_timestamp(self, current_time=None):
@@ -199,6 +204,7 @@ class ClientTransaction(ProjectBasedTransaction):
                 raise WFTransactionError("{!r} is already executed".format(self))
 
             super().handle_exit(error)
+            self.tm.callback_out(self)
 
     def commit(self):
         return self.get_transaction_json()

@@ -145,7 +145,7 @@ class FastBrowser(BaseBrowser):
         data = None
         if kwargs:
             data = urlencode(kwargs).encode()
-
+        
         method = 'POST' if data else 'GET'
 
         headers = {

@@ -16,6 +16,7 @@ def main():
         node.edit("hello")
         node.is_completed = False
         node2 = node.create()
+        node2.edit("world3", "world1")
 
     wf.pretty_print()
     

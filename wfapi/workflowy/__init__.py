@@ -117,8 +117,9 @@ class Workflowy(BaseWorkflowy, OperationCollection):
 
         self.globals.clear()
         self.settings.clear()
-        self.tm.clear()
+
         self.pm.clear()
+        self.tm.clear()
 
     def __contains__(self, node):
         return node in self.main
@@ -203,6 +204,7 @@ class Workflowy(BaseWorkflowy, OperationCollection):
             ptree["auxiliaryProjectTreeInfos"],
         )
         
+        self.client_id = ptree["clientId"]
         self.handle_init()
         self.inited = True
 
@@ -227,6 +229,7 @@ class Workflowy(BaseWorkflowy, OperationCollection):
         raise NotImplementedError
 
     def push_and_poll(self, transactions=None, *, from_tm=False):
+        assert from_tm is True
         if transactions is None:
             transactions = []
         
@@ -234,22 +237,22 @@ class Workflowy(BaseWorkflowy, OperationCollection):
         self._handle_errors_by_push_and_poll(info)
         
         if not from_tm:
-            return self.tm.execute_server_transaction(info)
+            return self.tm._execute_server_transactions(info)
         
         return map(attrdict, info.get("results", []))
 
     def _push_and_poll(self, transactions):
         info = dict (
-            client_id=self.project_tree.clientId,
+            client_id=self.client_id,
             client_version=self.client_version,
             push_poll_id=generate_tid(),
             push_poll_data=json.dumps(transactions),
         )
 
         mpstatus = self.main.status
-        if mpstatus.share_type is not None:
-            assert self.status.share_type == "url"
-            arguments.update(share_id=mpstatus.share_id)
+        if mpstatus.get("share_type") is not None:
+            assert mpstatus.share_type == "url"
+            info.update(share_id=mpstatus.share_id)
 
         _, data = self.browser["push_and_poll"](**info)
         return data
