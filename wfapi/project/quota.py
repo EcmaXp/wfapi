@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
+from math import isinf
+
 from ..const import DEFAULT_WORKFLOWY_MONTH_QUOTA
 from ..error import WFOverflowError
-from math import isinf
 
 __all__ = ["BaseQuota", "DefaultQuota", "ProQuota", "VoidQuota", "SharedQuota"]
 

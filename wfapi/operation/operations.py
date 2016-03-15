@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import warnings
-from ..const import FEATURE_XXX_PRO_USER as _FEATURE_XXX_PRO_USER
+
 from . import OPERATION_REGISTERED
+from ..const import FEATURE_XXX_PRO_USER as _FEATURE_XXX_PRO_USER
+from ..utils import attrdict
 
 __all__ = ["Operation"]
 
@@ -128,7 +130,7 @@ class Operation():
 _register_operation = Operation._register
 
 
-class _UnknownOperation(Operation):
+class UnknownOperation(Operation):
     operation_name = "_unknown"
 
     def __init__(self, op):
@@ -143,7 +145,7 @@ class _UnknownOperation(Operation):
         return self.op.data
 
     def __repr__(self):
-        return "<_UnknownOperation: %s; %r>" % (self.operation_name, self.data)
+        return "<UnknownOperation: %s; %r>" % (self.operation_name, self.data)
 
     def pre_operation(self, tr):
         pass
@@ -175,7 +177,7 @@ class _UnknownOperation(Operation):
 
 
 @_register_operation
-class _EditOperation(Operation):
+class EditOperation(Operation):
     operation_name = 'edit'
 
     def __init__(self, node, name=None, description=None):
@@ -184,16 +186,16 @@ class _EditOperation(Operation):
         self.description = description
 
     def pre_operation(self, tr):
-        assert tr.project.nodemgr.check_exist_node(self.node)
+        pass
 
     def post_operation(self, tr):
-        rawnode = self.node.raw
+        raw = self.node.raw
 
         if self.name is not None:
-            rawnode.nm = self.name
+            raw['nm'] = self.name
 
         if self.description is not None:
-            rawnode.no = self.description
+            raw['no'] = self.description
 
     @classmethod
     def from_server_operation(cls, tr, node, name=None, description=None):
@@ -214,7 +216,7 @@ class _EditOperation(Operation):
 
 
 @_register_operation
-class _CreateOperation(Operation):
+class CreateOperation(Operation):
     operation_name = 'create'
 
     def __init__(self, parent, node, priority):
@@ -223,10 +225,10 @@ class _CreateOperation(Operation):
         self.priority = priority
 
     def pre_operation(self, tr):
-        assert tr.project.nodemgr.check_not_exist_node(self.node)
+        pass
 
     def post_operation(self, tr):
-        self.parent.insert(self.priority, self.node)
+        self.parent._insert(self.priority, self.node.raw)
         tr.wf.add_node(self.node, update_quota=True)
         # TODO: more good way to management node.
 
@@ -247,20 +249,21 @@ class _CreateOperation(Operation):
     @classmethod
     def from_server_operation(cls, tr, projectid, parentid, priority):
         node = tr.project.nodemgr.new_void_node(projectid)
-        rawnode = node.raw
-        rawnode.last_modified = tr.get_client_timestamp()
+        raw = node.raw
+        raw['lm'] = tr.get_client_timestamp()
         parent = tr.wf[parentid]
         return cls(parent, node, priority)
 
 
-class __CompleteNodeOperation(Operation):
+class _CompleteNodeOperation(Operation):
     operation_name = NotImplemented
 
     def pre_operation(self, tr):
-        assert tr.project.nodemgr.check_exist_node(self.node)
+        pass
 
     def post_operation(self, tr):
-        self.node.completed_at
+        raw = self.node.raw
+        raw['cp']
 
     def get_operation_data(self, tr):
         return dict(
@@ -269,7 +272,7 @@ class __CompleteNodeOperation(Operation):
 
     def get_undo_data(self, tr):
         return dict(
-            previous_completed=self.node.completed_at if self.node.completed_at is not None else False,
+            previous_completed=self.node.raw['cp'] if self.node.raw['cp'] is not None else False,
         )
 
     @classmethod
@@ -278,7 +281,7 @@ class __CompleteNodeOperation(Operation):
 
 
 @_register_operation
-class _CompleteOperation(__CompleteNodeOperation):
+class CompleteOperation(_CompleteNodeOperation):
     operation_name = 'complete'
 
     def __init__(self, node, modified=None):
@@ -293,24 +296,24 @@ class _CompleteOperation(__CompleteNodeOperation):
 
     def post_operation(self, tr):
         super().post_operation(tr)
-        rawnode = self.node.raw
-        rawnode.completed_at = self.modified
+        raw = self.node.raw
+        raw['cp'] = self.modified
 
 
 @_register_operation
-class _UncompleteOperation(__CompleteNodeOperation):
+class UncompleteOperation(_CompleteNodeOperation):
     operation_name = 'uncomplete'
 
     def __init__(self, node):
         self.node = node
 
     def post_operation(self, tr):
-        rawnode = self.node.raw
-        rawnode.cp = None
+        raw = self.node.raw
+        raw['cp'] = None
 
 
 @_register_operation
-class _DeleteOperation(Operation):
+class DeleteOperation(Operation):
     operation_name = 'delete'
 
     def __init__(self, node):
@@ -343,7 +346,7 @@ class _DeleteOperation(Operation):
 
 
 @_register_operation
-class _UndeleteOperation(Operation):
+class UndeleteOperation(Operation):
     operation_name = 'undelete'
 
     def __init__(self):
@@ -351,7 +354,7 @@ class _UndeleteOperation(Operation):
 
 
 @_register_operation
-class _MoveOperation(Operation):
+class MoveOperation(Operation):
     operation_name = 'move'
 
     def __init__(self, parent, node, priority):
@@ -367,6 +370,8 @@ class _MoveOperation(Operation):
             raise WFNodeError("{!r} not have {!r}".format(self.parent, self.node))
 
     def post_operation(self, tr):
+        raise NotImplementedError # TODO: fix this. (parent is missing; callback?)
+
         rawnode = self.node.raw
         rawnode.parent.remove(self.node)
         rawnode.parent = self.parent
@@ -402,7 +407,7 @@ class _MoveOperation(Operation):
 
 
 # @_register_operation
-class _ShareOperation(Operation):
+class ShareOperation(Operation):
     operation_name = 'share'
     NotImplemented
 
@@ -439,7 +444,7 @@ class _ShareOperation(Operation):
             )
 
 @_register_operation
-class _UnshareOperation(Operation):
+class UnshareOperation(Operation):
     operation_name = 'unshare'
 
     def __init__(self, node):
@@ -452,13 +457,14 @@ class _UnshareOperation(Operation):
     def post_operation(self, tr):
         rawnode = self.node
         rawnode.shared = None
+        raise NotImplementedError
 
     def get_operation_data(self, tr):
         return dict(
             projectid=self.node.projectid,
         )
 
-    get_undo_data = _ShareOperation.get_undo_data
+    get_undo_data = ShareOperation.get_undo_data
 
     @classmethod
     def from_server_operation(cls, tr, node):
@@ -466,7 +472,7 @@ class _UnshareOperation(Operation):
 
 
 @_register_operation
-class _BulkCreateOperation(Operation):
+class BulkCreateOperation(Operation):
     operation_name = 'bulk_create'
     # This operation does add node (with many child) at one times.
 
@@ -506,7 +512,7 @@ class _BulkCreateOperation(Operation):
 
 
 # @_register_operation
-class _BulkMoveOperation(Operation):
+class BulkMoveOperation(Operation):
     operation_name = 'bulk_move'
     NotImplemented
 

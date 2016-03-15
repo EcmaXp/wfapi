@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 import os
-import uuid
 import random
 import re
 import string
-from pprint import pprint
+import uuid
 from contextlib import contextmanager
+from pprint import pprint
 from urllib.error import HTTPError
-
 
 # TODO: remove pprint from other code.
 __all__ = ["pprint"]
+
 
 def allplus(obj):
     __all__.append(obj.__name__)
@@ -35,6 +35,7 @@ def debug_helper_with_json(info):
     else:
         yield
 
+
 @allplus
 class attrdict(dict):
     def __init__(self, *args, **kwargs):
@@ -47,23 +48,28 @@ class attrdict(dict):
         self.update(value)
 # TODO: KEEP attrdict? or add safe() for getting key safety
 
+
 @allplus
 def generate_tid():
     return "".join(random.choice(IDENTIFY_TID) for i in range(8))
+
 
 @allplus
 def generate_uuid():
     return str(uuid.UUID(bytes=os.urandom(16)))
 
+
 @allplus
 def uncapword(word):
     return "_".join(REGEX_CAPWORD.findall(word)).lower()
+
 
 @allplus
 def uncapdict(d):
     for k, v in d.items():
         yield uncapword(k), v
-        
+
+
 @allplus
 @contextmanager
 def capture_http404(error_class=Exception):

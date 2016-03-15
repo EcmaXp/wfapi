@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
+import functools
+import json
+import sys
 import threading
 from contextlib import closing
 from http.client import HTTPConnection, HTTPSConnection
 from http.cookiejar import Cookie, CookieJar
-from urllib.error import HTTPError
-from urllib.parse import urljoin, urlencode, urlparse
-from urllib.request import build_opener, HTTPCookieProcessor, Request, \
-    HTTPErrorProcessor
+from urllib.parse import urlencode, urljoin, urlparse
+from urllib.request import (HTTPCookieProcessor, HTTPErrorProcessor, Request,
+                            build_opener)
+
 from .. import const
-import functools
-import json
 
 assert const.DEFAULT_WORKFLOWY_URL
 
@@ -21,6 +22,7 @@ def get_default_workflowy_url(base_url):
         return const.DEFAULT_WORKFLOWY_URL
 
     return base_url
+
 
 class BaseBrowser():
     def __init__(self, base_url=None):
@@ -126,7 +128,7 @@ class FastBrowser(BaseBrowser):
                 self.error_handler = handler
                 break
         else:
-            raise RuntimeEror("Not exists HTTPErrorProcessor in urlopener")
+            raise RuntimeError("Not exists HTTPErrorProcessor in urlopener")
 
     def get_connection(self):
         try:

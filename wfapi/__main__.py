@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 from wfapi import *
 
-def main():
-    class WeakWorkflowy(WFMixinWeak, Workflowy):
-        pass
 
+class WeakWorkflowy(WFMixinWeak, Workflowy):
+    pass
+
+
+def main():
     wf = WeakWorkflowy("hBYC5FQsDC")
     
     with wf.transaction():

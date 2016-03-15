@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-#raise NotImplementedError
 from .quota import *
 from ..node.manager import *
 from ..utils import uncapdict, uncapword, attrdict
-import re
+from ..error import WFRuntimeError
+import json
 
 __all__ = ["BaseProject", "Project"]
+
 
 class BaseProject(NodeManagerInterface):
     NODE_MANAGER_CLASS = NotImplemented
@@ -86,13 +87,15 @@ class Project(BaseProject):
         return iter(self.nodemgr)
 
     def add_node(self, node, recursion=True, update_quota=True):
-        added_nodes = self.nodemgr.add(node, recursion=recursion)
+        NotImplemented
+        added_nodes = 1
 
         if update_quota:
             self.quota += added_nodes
 
     def remove_node(self, node, recursion=False, update_quota=True):
-        removed_nodes = self.nodemgr.remove(node, recursion=recursion)
+        NotImplemented
+        removed_nodes = 1
 
         if update_quota:
             self.quota -= removed_nodes

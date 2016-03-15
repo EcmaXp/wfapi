@@ -25,6 +25,7 @@ class BaseWorkflowy(NodeManagerInterface):
     TRANSACTION_MANAGER_CLASS = NotImplemented
 
     def __init__(self):
+        self._inited = False
         raise NotImplementedError
 
     def transaction(self):
@@ -47,6 +48,12 @@ class BaseWorkflowy(NodeManagerInterface):
             yield
         finally:
             pass
+
+    def reset(self):
+        pass
+
+    def _init(self, *args, **kwargs):
+        pass
 
     def handle_init(self):
         pass

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-import re
 import functools
+import re
 
 
 # TODO: support search by workflowy's keyword

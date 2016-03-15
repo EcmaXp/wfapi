@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 import pickle
-import sys
-import warnings
 import random
-import threading
+import sys
 from collections import namedtuple
+
 from .. import BaseWorkflowy
-from ...error import WFUnsupportedFeature
+from ...error import WFLoginError, WFUnsupportedFeature
 
 __all__ = ["WFMixinAutoLogin"]
 
@@ -15,8 +14,12 @@ try:
 except Exception:
     raise WFUnsupportedFeature("autologin are disabled. cause by sys._getframe calling is failed.")
 
+Protected = ProtectObject = None
+
 def _SafeSupport():
     global DEFAULT_PROTECTED_OBJECT
+    global Protected, ProtectObject
+
     DEFAULT_PROTECTED_OBJECT = object()
     B = random.randrange(2**32)
     C = random.randrange(2**32) * B / len(repr(DEFAULT_PROTECTED_OBJECT))
@@ -25,8 +28,7 @@ def _SafeSupport():
     def E(F):
         I = random.Random(B)
         return bytes((J^F for J, F in zip((I.randrange(2**8)^D^(i&0xFF) for i in range(len(F))), F)))
-    
-    global Protected
+
     class Protected():
         __slots__ = ["froms"]
         
@@ -37,7 +39,6 @@ def _SafeSupport():
             assert self is not self.froms
             return "<%s object from %r>" % (type(self).__name__, self.froms)
 
-    global ProtectObject
     class ProtectObject():
         __slots__ = ["_data"]
      

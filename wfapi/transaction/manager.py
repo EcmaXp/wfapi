@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-from .. import utils
-from . import ClientTransaction, ServerTransaction
 from threading import Lock
+
+from . import ClientTransaction, ServerTransaction
+from .. import utils
 
 __all__ = ["BaseTransactionManager", "TransactionManager"]
 
@@ -89,4 +90,3 @@ class TransactionManager(BaseTransactionManager):
             )
             
             server_transaction.commit()
-            

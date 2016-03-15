@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import re
+
 from .pattern import *
 
 __all__ = ["DefaultSearcher", "Searcher", "SpecialSearcher"]

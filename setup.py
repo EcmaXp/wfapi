@@ -3,7 +3,8 @@
 # https://docs.python.org/3.4/distributing/index.html
 # https://packaging.python.org/en/latest/distributing.html
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
+
 import wfapi
 
 wfapi_doc = wfapi.__doc__.splitlines()

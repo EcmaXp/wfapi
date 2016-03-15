@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
+import json
+import re
 
 __all__ = ["get_globals_from_home"]
-
-import re
-import json
 
 # TODO: just move code?
 SCRIPT_TAG_REGEX = re.compile("".join([
@@ -13,6 +12,7 @@ re.escape('<script type="text/javascript">'), "(.*?)", re.escape('</script>'),
 SCRIPT_VAR_REGEX = re.compile("".join([
 re.escape("var "), "(.*?)", re.escape(" = "), "(.*?|\{.*?\})", re.escape(";"), '$',
 ]), re.DOTALL | re.MULTILINE)
+
 
 def get_globals_from_home(content):
     for source in SCRIPT_TAG_REGEX.findall(content):
@@ -31,4 +31,3 @@ def get_globals_from_home(content):
     
             value = json.loads(value)
             yield key, value
-            
