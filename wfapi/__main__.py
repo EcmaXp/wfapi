@@ -7,6 +7,7 @@ class WeakWorkflowy(WFMixinWeak, Workflowy):
 
 
 def main():
+    global wf
     wf = WeakWorkflowy("hBYC5FQsDC")
     
     with wf.transaction():
@@ -14,11 +15,9 @@ def main():
             node = wf.root.create()
         else:
             node = wf.root[0]
-            
-        node.edit("hello")
-        node.is_completed = False
-        node2 = node.create()
-        node2.edit("world3", "world1")
+
+        for ch in node:
+            ch.delete()
 
     wf.pretty_print()
     

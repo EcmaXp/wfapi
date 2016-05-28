@@ -8,19 +8,16 @@ from contextlib import contextmanager
 from pprint import pprint
 from urllib.error import HTTPError
 
-# TODO: remove pprint from other code.
-__all__ = ["pprint"]
+__all__ = ["pprint", "debug_helper_with_json", "attrdict",
+        "generate_tid", "generate_uuid", "uncapword", "uncapdict",
+        "capture_http404"]
 
-
-def allplus(obj):
-    __all__.append(obj.__name__)
-    return obj
 
 # for generate_tid
 IDENTIFY_TID = string.digits + string.ascii_letters
-REGEX_CAPWORD = re.compile("([A-Z]?[^A-Z]+)")
+RE_CAPWORD = re.compile("([A-Z]?[^A-Z]+)")
 
-@allplus
+
 @contextmanager
 def debug_helper_with_json(info):
     if __debug__:
@@ -36,7 +33,6 @@ def debug_helper_with_json(info):
         yield
 
 
-@allplus
 class attrdict(dict):
     def __init__(self, *args, **kwargs):
           super().__init__(*args, **kwargs)
@@ -49,28 +45,23 @@ class attrdict(dict):
 # TODO: KEEP attrdict? or add safe() for getting key safety
 
 
-@allplus
 def generate_tid():
     return "".join(random.choice(IDENTIFY_TID) for i in range(8))
 
 
-@allplus
 def generate_uuid():
     return str(uuid.UUID(bytes=os.urandom(16)))
 
 
-@allplus
 def uncapword(word):
-    return "_".join(REGEX_CAPWORD.findall(word)).lower()
+    return "_".join(RE_CAPWORD.findall(word)).lower()
 
 
-@allplus
 def uncapdict(d):
     for k, v in d.items():
         yield uncapword(k), v
 
 
-@allplus
 @contextmanager
 def capture_http404(error_class=Exception):
     try:

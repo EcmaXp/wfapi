@@ -4,8 +4,8 @@ import random
 import sys
 from collections import namedtuple
 
-from .. import BaseWorkflowy
-from ...error import WFLoginError, WFUnsupportedFeature
+from ..error import WFLoginError, WFUnsupportedFeature
+from ..workflowy import BaseWorkflowy
 
 __all__ = ["WFMixinAutoLogin"]
 

@@ -1,31 +1,56 @@
 #!/usr/bin/env python3
-# https://github.com/pypa/sampleproject
-# https://docs.python.org/3.4/distributing/index.html
-# https://packaging.python.org/en/latest/distributing.html
+
+import sys
 
 from setuptools import find_packages, setup
+from setuptools.command.test import test as TestCommand
 
-import wfapi
+WFAPI_NAME = "wfapi"
+WFAPI_VERSION = "0.5.0a0"
+WFAPI_DESC = "Workflowy's Unoffical API for Python3."
 
-wfapi_doc = wfapi.__doc__.splitlines()
+with open("README.rst") as fp:
+    WFAPI_DOC = fp.read()
+
+
+class PyTest(TestCommand):
+    user_options = [('pytest-args=', 'a', "Arguments to pass to py.test")]
+
+    def initialize_options(self):
+        TestCommand.initialize_options(self)
+        self.pytest_args = []
+
+    def run_tests(self):
+        import pytest
+        errno = pytest.main(self.pytest_args)
+        sys.exit(errno)
+
 
 setup(
-    name='wfapi',
-    url="https://github.com/sigsrv/wfapi",
-    author="sigsrv",
-    author_email="sigsrv@sigsrv.net",
-    version=wfapi.__version__,
-    description=wfapi_doc[0],
-    long_description="\n".join(wfapi_doc[1:]), # change later.
-    packages=find_packages(),
+    name=WFAPI_NAME,
+    url="https://github.com/ecmaxp/wfapi",
+    author="EcmaXp",
+    author_email="wfapi@ecmaxp.net",
+    version=WFAPI_VERSION,
+    description=WFAPI_DOC,
+    long_description="\n".join(WFAPI_DOC[1:]), # change later.
+    packages=[
+        "wfapi",
+    ],
+    tests_require=[
+        "pytest",
+        "sphinx",
+        "sphinx_rtd_theme",
+    ],
+    cmdclass={
+        'test': PyTest,
+    },
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Operating System :: OS Independent",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3 :: Only",
-        "Programming Language :: Python :: 3.4",
         "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
-        "Topic :: Internet :: WWW/HTTP :: Dynamic Content :: CGI Tools/Libraries",
     ],
     keywords='workflowy',
 )

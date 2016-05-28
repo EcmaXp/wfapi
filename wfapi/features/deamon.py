@@ -3,8 +3,8 @@ import queue
 import threading
 import time
 
-from .. import BaseWorkflowy
-from ...transaction import SimpleSubClientTransaction
+from ..transaction import SimpleSubClientTransaction
+from ..workflowy import BaseWorkflowy
 
 __all__ = ["WFMixinDeamon"]
 

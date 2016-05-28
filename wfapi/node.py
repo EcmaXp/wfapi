@@ -1,28 +1,27 @@
 # -*- coding: utf-8 -*-
+import copy
 import functools
 import sys
-from ..operation import OperationCollection
-from .. import utils as _utils
-from ..const import DEFAULT_ROOT_NODE_ID
-from ..error import WFNodeError
+from weakref import WeakValueDictionary
 
-
-def _raise_found_node_parent(self, node):
-    raise WFNodeError("Already parent found.")
+from . import utils as _utils
+from .const import DEFAULT_ROOT_NODE_ID
+from .operation import OperationCollection
 
 
 class Node():
-    __slots__ = ["raw", "_parentid", "__weakref__"]
+    __slots__ = ["raw", "_parent", "__weakref__"]
 
-    def __init__(self, projectid=None, parentid=None, last_modified=0, name="", children=(),
-                 description="", completed_at=None, shared=None, parent=None):
+    def __init__(self, projectid=None, parent=None, last_modified=0, name="", children=(),
+                 description="", completed_at=None, shared=None):
 
         if projectid is None:
             projectid = self.generate_uuid()
 
+        self._parent = parent
+
         if isinstance(projectid, dict):
             self.raw = projectid
-            self._parentid = parentid
         else:
             assert not children or all(isinstance(node, dict) for node in children)
 
@@ -38,7 +37,15 @@ class Node():
 
     @property
     def projectid(self):
+        """
+
+        :return:UUID-like string
+        """
         return self.raw['id']
+
+    @property
+    def parent(self):
+        return self._parent
 
     @property
     def last_modified(self):
@@ -61,16 +68,6 @@ class Node():
         return self.raw['shared']
 
     @property
-    def children(self):
-        # TODO: not allow edit children without API?
-        return tuple(self.raw.setdefault('ch', []))
-
-    @property
-    def parentid(self):
-        # TODO: _projectid can be None or Not assigned! (WORRY)
-        return self._parentid
-
-    @property
     def is_completed(self):
         return self.completed_at is not None
 
@@ -85,13 +82,13 @@ class Node():
         raw = self.raw
 
         return ("{clsname}(projectid={projectid!r}, last_modified={last_modified!r}, "
-            "name={name!r}, children={children!r}, description={description!r}"
+            "name={name!r}, len(self)={length!r}, description={description!r}"
             "{_completed_at}{_shared})").format(
             clsname = type(self).__name__,
             projectid = self.projectid,
             last_modified = self.last_modified,
             name = self.name,
-            children = self.children,
+            length = len(self),
             description = self.description,
             _completed_at = vif(raw.get('cp'), ", cp={!r}".format(raw['cp']), ""),
             _shared = vif(raw.get('shared'), ", shared={!r}".format(raw['shared']), ""),
@@ -104,14 +101,22 @@ class Node():
         return len(self.raw.get('ch', ()))
 
     def __contains__(self, item):
-        if self.raw.get('ch') is None:
+        childs = self.raw.get('ch')
+        if childs is None:
             return False
 
-        return item in self.children
+        if isinstance(item, Node):
+            item = item.raw
+
+        return item in childs
+
+    def _get_child(self, raw):
+        return type(self)(raw, parent=self)
 
     def __iter__(self):
+        projectid = self.projectid
         ch = self.raw.get('ch', ())
-        return map(type(self), ch)
+        return map(self._get_child, ch)
 
     def __getitem__(self, item):
         ch = self.raw.get('ch')
@@ -119,20 +124,13 @@ class Node():
             if ch is None:
                 raise IndexError(item)
 
-        return type(self)(ch[item])
-
-    if 0:
-        def copy(self):
-            # TODO: implement this
-            raise NotImplementedError
+        return self._get_child(ch[item])
 
     def _insert(self, index, node):
-        self.children
-        self.raw['ch'].insert(index, node)
+        self.raw.setdefault('ch', []).insert(index, node)
 
     def walk(self):
         childs = list(self)
-
         yield self, childs
 
         for child in childs:
@@ -167,7 +165,7 @@ class Node():
             child.pretty_print(indent=indent)
 
     def to_json(self):
-        return dict(self.raw)
+        return copy.deepcopy(self.raw)
 
     @classmethod
     def from_void(cls, uuid=None, project=None):
@@ -176,11 +174,12 @@ class Node():
     generate_uuid = staticmethod(_utils.generate_uuid)
 
 
-class _WeakNode(Node):
+class WeakNode(Node):
     __slots__ = []
     
     # virtual attribute
     _wf = NotImplemented
+    # _project?
 
     def __getattr__(self, item):
         if not item.startswith("_") and item in dir(OperationCollection):
@@ -191,12 +190,21 @@ class _WeakNode(Node):
     @Node.name.setter
     def name(self, name):
         self.edit(name, None)
-        self.raw.nm = name
 
     @Node.description.setter
     def description(self, description):
         self.edit(None, description)
-        self.raw.no = description
+
+    @property
+    def is_completed(self):
+        return bool(self.completed_at)
+
+    @is_completed.setter
+    def is_completed(self, is_completed):
+        if is_completed:
+            self.complete()
+        else:
+            self.uncomplete()
 
     @property
     def completed_at(self):
@@ -204,19 +212,79 @@ class _WeakNode(Node):
         convert = lambda x: x
         return convert(self.raw['cp'])
 
-    @completed_at.setter
-    def completed_at(self, completed_at):
-        completed_at = self.complete(completed_at)
-        self.raw['cp'] = completed_at
 
-    @Node.completed_at.setter
-    def is_completed(self, is_completed):
-        if is_completed:
-            self.raw['cp'] = self.complete()
+class BaseNodeManager():
+    NODE_CLASS = NotImplemented
+
+
+class NodeManager(BaseNodeManager):
+    NODE_CLASS = Node
+
+    def __init__(self, project):
+        super().__init__()
+        # XXX [!] cycle reference
+        self.project = project
+        self.data = WeakValueDictionary()
+        self.root = None
+        self.cache = {}
+
+    def __contains__(self, item):
+        return item in self.cache
+
+    def __getitem__(self, item):
+        return self.cache[item]
+
+    def update_root(self, root_project, root_project_children):
+        self.root = self.new_root_node(root_project, root_project_children)
+
+        cache = self.cache
+        for raw in self._walk():
+            cache[raw['id']] = raw
+
+    def new_root_node(self, root_project, root_project_children):
+        # XXX [!] project is Project, root_project is root node. ?!
+        if root_project is None:
+            root_project = dict(id=DEFAULT_ROOT_NODE_ID)
         else:
-            self.uncomplete()
-            self.raw['cp'] = None
+            root_project.update(id=DEFAULT_ROOT_NODE_ID)
+            # in shared mode, root will have uuid -(replace)> DEFAULT_ROOT_NODE_ID
 
-#class OperationEngine():
-#    "Use yield for operation, and undo?"
-#    pass
+        root_project.update(ch=root_project_children)
+        root = self.NODE_CLASS(root_project)
+        return root
+
+    def new_void_node(self):
+        return self.NODE_CLASS()
+
+    def _walk(self, raw=None):
+        if raw is None:
+            raw = self.root.raw
+
+        yield raw
+
+        ch = raw.get("ch")
+        if ch is not None:
+            walk = self._walk
+            for child in ch:
+                yield from walk(child)
+
+    @property
+    def pretty_print(self):
+        return self.root.pretty_print
+
+
+class NodeManagerInterface():
+    def __contains__(self, node):
+        raise NotImplementedError
+
+    def __getitem__(self, node):
+        raise NotImplementedError
+
+    def __iter__(self):
+        raise NotImplementedError
+
+    def add_node(self, node, recursion=True, update_quota=True):
+        raise NotImplementedError
+
+    def remove_node(self, node, recursion=False, update_quota=True):
+        raise NotImplementedError

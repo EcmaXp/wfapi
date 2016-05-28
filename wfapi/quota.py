@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from math import isinf
 
-from ..const import DEFAULT_WORKFLOWY_MONTH_QUOTA
-from ..error import WFOverflowError
+from .const import DEFAULT_WORKFLOWY_MONTH_QUOTA
+from .error import WFOverflowError
 
 __all__ = ["BaseQuota", "DefaultQuota", "ProQuota", "VoidQuota", "SharedQuota"]
 
@@ -11,8 +11,9 @@ assert isinf(INF)
 
 
 class BaseQuota():
-    def __init__(self):
-        raise NotImplementedError
+    def __init__(self, *, used, total):
+        self.used = used
+        self.total = total
 
     def is_full(self):
         return self.used >= self.total
@@ -53,8 +54,7 @@ class BaseQuota():
 
 class DefaultQuota(BaseQuota):
     def __init__(self, used=0, total=DEFAULT_WORKFLOWY_MONTH_QUOTA):
-        self.used = used
-        self.total = total
+        super().__init__(used=used, total=total)
 
     def update(self, status):
         self.used = status.items_created_in_current_month
@@ -66,8 +66,7 @@ class DefaultQuota(BaseQuota):
 
 class ProQuota(BaseQuota):
     def __init__(self):
-        self.used = 0
-        self.total = INF
+        super().__init__(used=0, total=INF)
 
     def handle_overflow(self):
         pass
@@ -75,17 +74,15 @@ class ProQuota(BaseQuota):
 
 class VoidQuota(BaseQuota):
     def __init__(self):
-        self.used = INF
-        self.total = 0
+        super().__init__(used=INF, total=0)
 
     def handle_overflow(self):
-        raise WFOverflowError("quota infomation are not inited.")
+        raise WFOverflowError("quota information are not inited.")
 
 
 class SharedQuota(BaseQuota):
     def __init__(self, is_over=False):
-        self.used = 0
-        self.total = INF
+        super().__init__(used=0, total=INF)
         self.is_over = is_over
 
     def update(self, status):

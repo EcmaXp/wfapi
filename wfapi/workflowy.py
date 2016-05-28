@@ -7,15 +7,16 @@
 
 import json
 from contextlib import contextmanager
+
 from .browser import DefaultBrowser
-from .internal import get_globals_from_home
-from ..const import DEFAULT_WORKFLOWY_CLIENT_VERSION
-from ..transaction.manager import TransactionManager
-from ..node.manager import NodeManagerInterface
-from ..project.manager import ProjectManager
-from ..operation import OperationCollection
-from ..error import *
-from ..utils import *
+from .const import DEFAULT_WORKFLOWY_CLIENT_VERSION
+from .error import *
+from .node import NodeManagerInterface
+from .operation import OperationCollection
+from .project import ProjectManager
+from .tools import get_globals_from_home
+from .transaction import TransactionManager
+from .utils import *
 
 __all__ = ["BaseWorkflowy", "Workflowy"]
 

@@ -2,8 +2,10 @@
 import functools
 import re
 
-
 # TODO: support search by workflowy's keyword
+
+RE_SEARCH_QUOTED_QUERY = re.compile(r'(^|\s)(-?"[^"]*")($|\s)')
+
 
 @functools.total_ordering
 class BasePattern():
@@ -36,8 +38,7 @@ class BasePattern():
 
 
 class Pattern(BasePattern):
-    def __init__(self):
-        pass
+    pass
     
 
 class BitOperationPattern(BasePattern):
@@ -55,12 +56,12 @@ class WFQueryBasedOP(BitOperationPattern):
         self._pattern = self._compile_pattern(self.nested_patterns)
     
     @classmethod
-    def _compile_pattern(cls, nested_pattern);
-        anypatterns = []
+    def _compile_pattern(cls, nested_pattern):
+        any_patterns = []
         for patterns in nested_pattern:
-            anypatterns.append(AndOP(*patterns))
+            any_patterns.append(AndOP(*patterns))
         
-        return OrOP(*anypatterns)
+        return OrOP(*any_patterns)
 
     def match(self, node):
         return self._pattern.match(node)
@@ -126,3 +127,58 @@ class NotOP(BitOperationPattern):
 
 class IsCompletedPattern():
     pass
+
+
+class BaseSearcher():
+    def __init__(self, pattern):
+        self.pattern = pattern
+
+    def search(self, node, *, recursion=True):
+        pattern = self.pattern
+
+        if recursion:
+            for node, childs in node.fast_walk():
+                if pattern.match(node):
+                    yield node
+        else:
+            if pattern.match(node):
+                yield node
+
+
+class Searcher(BaseSearcher):
+    pass
+
+
+class DefaultSearcher(BaseSearcher):
+    # check document_view.js:9876
+    def __init__(self, query):
+        self.query = query
+        super().__init__(self.process_query(query))
+
+    @classmethod
+    def process_query(cls, query):
+        nested_patterns = cls.parse_query(query)
+        compiled_patterns = cls.compile_patterns(nested_patterns)
+        return compiled_patterns
+
+    @classmethod
+    def parse_query(cls, query):
+        nested_patterns = []
+
+        start = end = 0
+        while query:
+            m = RE_SEARCH_QUOTED_QUERY.match(query)
+            if not m:
+                break
+
+            start, end = m.span()
+            nested_patterns += filter(None, query[:start].split())
+            nested_patterns.append(m.group(1))
+            query = query[end:]
+
+        nested_patterns += filter(None, query[end:].split())
+        return nested_patterns
+
+    @classmethod
+    def compile_patterns(cls, nested_patterns):
+        return WFQueryBasedOP(nested_patterns)

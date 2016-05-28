@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
 
-class ProjectReload(BaseException):
+
+class WFException(Exception):
     pass
 
 
-class WFError(Exception):
+class ProjectReload(WFException):
+    pass
+
+
+class WFError(WFException):
     pass
 
 
@@ -28,5 +33,5 @@ class WFNodeError(WFError):
     pass
 
 
-class WFOverflowError(WFError, OverflowError):
+class WFOverflowError(WFError):
     pass

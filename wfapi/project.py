@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
-from .quota import *
-from ..node.manager import *
-from ..utils import uncapdict, uncapword, attrdict
-from ..error import WFRuntimeError
 import json
 
-__all__ = ["BaseProject", "Project"]
+from .error import WFRuntimeError
+from .node import NodeManager, NodeManagerInterface
+from .quota import *
+from .utils import attrdict, uncapdict
 
+__all__ = ["Project", "ProjectManager"]
+
+
+class BaseProjectManager():
+    pass
 
 class BaseProject(NodeManagerInterface):
-    NODE_MANAGER_CLASS = NotImplemented
+    NODE_MANAGER_CLASS = NotImplemented # type: BaseProjectManager
     
     def __init__(self, ptree, *, pm):
         raise NotImplementedError
@@ -44,17 +48,6 @@ class Project(BaseProject):
         # TODO: support auxiliaryProjectTreeInfos for embbed node.
         s = self.status
         s.update(uncapdict(ptree))
-
-        if None:
-            s.most_recent_operation_transaction_id
-            s.date_joined_timestamp_in_seconds
-            s.polling_interval
-            
-            # TODO: support is_readonly attribute!
-            s.is_read_only
-            
-            s.date_joined_timestamp_in_seconds
-            s.items_created_in_current_month
 
         s.most_recent_operation_transaction_id = \
             s.initial_most_recent_operation_transaction_id
@@ -136,3 +129,37 @@ class Project(BaseProject):
     
     def transaction(self):
         return self.wf.new_transaction(self)
+
+
+class ProjectManager():
+    MAIN_PROJECT_CLASS = Project
+    PROJECT_CLASS = Project
+
+    def __init__(self, wf):
+        self.wf = wf
+        self.main = None
+        self.sub = []
+
+    def clear(self):
+        self.main = None
+        self.sub[:] = []
+
+    def init(self, main_ptree, auxiliary_ptrees):
+        self.main = self.build_main_project(main_ptree)
+
+        for ptree in auxiliary_ptrees:
+            project = self.build_project(ptree)
+            self.sub.append(project)
+
+        return self.main
+
+    def __iter__(self):
+        yield self.main
+        for project in self.sub:
+            yield project
+
+    def build_main_project(self, ptree):
+        return self.MAIN_PROJECT_CLASS(ptree, pm=self)
+
+    def build_project(self, ptree):
+        return self.PROJECT_CLASS(ptree, pm=self)

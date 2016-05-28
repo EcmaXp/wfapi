@@ -10,7 +10,7 @@ from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import (HTTPCookieProcessor, HTTPErrorProcessor, Request,
                             build_opener)
 
-from .. import const
+from . import const
 
 assert const.DEFAULT_WORKFLOWY_URL
 

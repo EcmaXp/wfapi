@@ -1,11 +1,63 @@
 # -*- coding: utf-8 -*-
+import json
 import warnings
 
-from . import OPERATION_REGISTERED
-from ..const import FEATURE_XXX_PRO_USER as _FEATURE_XXX_PRO_USER
-from ..utils import attrdict
+from .const import FEATURE_XXX_PRO_USER as _FEATURE_XXX_PRO_USER
+from .error import WFError, WFNodeError
+from .utils import attrdict
 
-__all__ = ["Operation"]
+__all__ = ["OperationCollection", "Operation"] # and ...
+OPERATION_REGISTERED = {}
+
+
+class TransactionInterface():
+    def transaction(self):
+        # TODO: raise NotImplementedError
+        pass
+
+
+class OperationCollection(TransactionInterface):
+    # TODO: add unsupported operation. (move, etc.)
+
+    def edit(self, node, name=None, description=None):
+        with self.transaction() as tr:
+            tr += EditOperation(node, name, description)
+
+    def create(self, parent, priority=-1, *, node=None):
+        #import pdb; pdb.set_trace()
+        priority_range = range(len(parent) + 1)
+
+        try:
+            priority = priority_range[priority]
+        except IndexError:
+            raise WFError("invalid priority are selected. (just use default value.)")
+
+
+        with self.transaction() as tr:
+            node = tr.project.nodemgr.new_void_node() if node is None else node
+            tr += CreateOperation(parent, node, priority)
+
+        return node
+
+    def complete(self, node, client_timestamp=None):
+        with self.transaction() as tr:
+            if client_timestamp is None:
+                client_timestamp = tr.get_client_timestamp()
+            tr += CompleteOperation(node, client_timestamp)
+        return client_timestamp
+
+    def uncomplete(self, node):
+        with self.transaction() as tr:
+            tr += UncompleteOperation(node)
+
+    def delete(self, node):
+        with self.transaction() as tr:
+            tr += DeleteOperation(node)
+
+    def search(self, node, pattern):
+        # pattern is very complex.
+        # http://blog.workflowy.com/2012/09/25/hidden-search-operators/
+        raise NotImplementedError("search are not implemented yet.")
 
 
 class Operation():
@@ -126,6 +178,7 @@ class Operation():
         OPERATION_REGISTERED[operation_name] = operation
 
         return operation
+
 
 _register_operation = Operation._register
 
@@ -317,19 +370,19 @@ class DeleteOperation(Operation):
     operation_name = 'delete'
 
     def __init__(self, node):
-        self.parent = node.parent
+        self.parent = node._parent
         self.node = node
-        self.priority = self.parent.children.index(node)
+        self.priority = self.parent.raw.get('ch', ()).index(node.raw)
         # TODO: more priority calc safety.
 
     def pre_operation(self, tr):
-        assert tr.project.nodemgr.check_exist_node(self.node)
+        pass
 
     def post_operation(self, tr):
         node = self.node
         if self.parent:
             assert node in self.parent
-            self.parent.children.remove(node)
+            self.parent.raw.get('ch', []).remove(node.raw)
 
         tr.wf.remove_node(node, recursion=True)
 
@@ -406,7 +459,6 @@ class MoveOperation(Operation):
         return cls(parent, node, priority)
 
 
-# @_register_operation
 class ShareOperation(Operation):
     operation_name = 'share'
     NotImplemented
@@ -442,6 +494,7 @@ class ShareOperation(Operation):
                 previous_share_type="url",
                 previous_write_permission=url_shared.get("write_permission"),
             )
+
 
 @_register_operation
 class UnshareOperation(Operation):
@@ -511,7 +564,6 @@ class BulkCreateOperation(Operation):
         return cls(parent, project_trees, starting_priority)
 
 
-# @_register_operation
 class BulkMoveOperation(Operation):
     operation_name = 'bulk_move'
     NotImplemented
