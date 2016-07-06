@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from ..node import NodeManager, WeakNode
 from ..project import Project, ProjectManager
-from ..workflowy import BaseWorkflowy
+from ..base import BaseWorkflowy
 
 __all__ = ["WFMixinWeak"]
 

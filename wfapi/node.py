@@ -4,21 +4,26 @@ import functools
 import sys
 from weakref import WeakValueDictionary
 
+from .base import BaseNodeManager
 from . import utils as _utils
 from .const import DEFAULT_ROOT_NODE_ID
 from .operation import OperationCollection
 
 
 class Node():
-    __slots__ = ["raw", "_parent", "__weakref__"]
+    __slots__ = ["raw", "_parent", "_context", "__weakref__"]
 
-    def __init__(self, projectid=None, parent=None, last_modified=0, name="", children=(),
+    def __init__(self, projectid=None, parent=None, context=None, *, last_modified=0, name="", children=(),
                  description="", completed_at=None, shared=None):
 
         if projectid is None:
             projectid = self.generate_uuid()
 
+        if context is None:
+            context = context
+
         self._parent = parent
+        self._context = context
 
         if isinstance(projectid, dict):
             self.raw = projectid
@@ -53,7 +58,7 @@ class Node():
 
     @property
     def name(self):
-        return self.raw['nm']
+        return self.raw.get('nm')
 
     @property
     def description(self):
@@ -173,25 +178,28 @@ class Node():
 
     generate_uuid = staticmethod(_utils.generate_uuid)
 
+<<<<<<< HEAD
+=======
 
 class WeakNode(Node):
     __slots__ = []
-    
+
     # virtual attribute
     _wf = NotImplemented
     # _project?
 
+>>>>>>> origin/master
     def __getattr__(self, item):
         if not item.startswith("_") and item in dir(OperationCollection):
-            return functools.partial(getattr(self._wf, item), self)
+            return functools.partial(getattr(self._context.workflowy, item), self)
 
         raise AttributeError(item)
 
-    @Node.name.setter
+    @name.setter
     def name(self, name):
         self.edit(name, None)
 
-    @Node.description.setter
+    @description.setter
     def description(self, description):
         self.edit(None, description)
 
@@ -211,10 +219,6 @@ class WeakNode(Node):
         # TODO: convert wf's timestamp to py's timestamp
         convert = lambda x: x
         return convert(self.raw['cp'])
-
-
-class BaseNodeManager():
-    NODE_CLASS = NotImplemented
 
 
 class NodeManager(BaseNodeManager):
@@ -273,18 +277,3 @@ class NodeManager(BaseNodeManager):
         return self.root.pretty_print
 
 
-class NodeManagerInterface():
-    def __contains__(self, node):
-        raise NotImplementedError
-
-    def __getitem__(self, node):
-        raise NotImplementedError
-
-    def __iter__(self):
-        raise NotImplementedError
-
-    def add_node(self, node, recursion=True, update_quota=True):
-        raise NotImplementedError
-
-    def remove_node(self, node, recursion=False, update_quota=True):
-        raise NotImplementedError

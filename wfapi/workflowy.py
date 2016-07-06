@@ -6,88 +6,18 @@
 """
 
 import json
-from contextlib import contextmanager
 
+from .base import BaseWorkflowy
 from .browser import DefaultBrowser
 from .const import DEFAULT_WORKFLOWY_CLIENT_VERSION
 from .error import *
-from .node import NodeManagerInterface
 from .operation import OperationCollection
 from .project import ProjectManager
 from .tools import get_globals_from_home
 from .transaction import TransactionManager
 from .utils import *
 
-__all__ = ["BaseWorkflowy", "Workflowy"]
-
-
-class BaseWorkflowy(NodeManagerInterface):
-    PROJECT_MANAGER_CLASS = NotImplemented
-    TRANSACTION_MANAGER_CLASS = NotImplemented
-
-    def __init__(self):
-        self._inited = False
-        raise NotImplementedError
-
-    def transaction(self):
-        raise NotImplementedError
-
-    # smart handler?
-    # TODO: change handle method
-    @contextmanager
-    def smart_handle_init(self):
-        try:
-            yield
-            self.handle_init()
-        finally:
-            pass
-
-    @contextmanager
-    def smart_handle_reset(self):
-        try:
-            self.handle_reset()
-            yield
-        finally:
-            pass
-
-    def reset(self):
-        pass
-
-    def _init(self, *args, **kwargs):
-        pass
-
-    def handle_init(self):
-        pass
-
-    def handle_reset(self):
-        pass
-
-    def handle_logout(self, counter=0):
-        pass
-
-    def reset(self):
-        # TODO: give argument to _reset and smart handler?
-        with self.smart_handle_reset():
-            self._reset()
-
-    def init(self, *args, **kwargs):
-        # TODO: give argument to smart handler? (_init require argument!)
-        with self.smart_handle_init():
-            self._init(*args, **kwargs)
-
-    @property
-    def inited(self):
-        return self._inited
-
-    @inited.setter
-    def inited(self, inited):
-        if inited:
-            self._inited = True
-        else:
-            if self._inited:
-                self.reset()
-            
-            self._inited = False
+__all__ = ["Workflowy"]
 
 
 class Workflowy(BaseWorkflowy, OperationCollection):

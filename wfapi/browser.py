@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import functools
 import json
 import sys
 import threading
@@ -10,11 +9,12 @@ from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import (HTTPCookieProcessor, HTTPErrorProcessor, Request,
                             build_opener)
 
+from .base import BaseBrowser
 from . import const
 
 assert const.DEFAULT_WORKFLOWY_URL
 
-__all__ = ["DefaultBrowser", "BaseBrowser", "BuiltinBrowser", "FastBrowser"]
+__all__ = ["DefaultBrowser", "BuiltinBrowser", "FastBrowser"]
 
 
 def get_default_workflowy_url(base_url):
@@ -22,24 +22,6 @@ def get_default_workflowy_url(base_url):
         return const.DEFAULT_WORKFLOWY_URL
 
     return base_url
-
-
-class BaseBrowser():
-    def __init__(self, base_url=None):
-        self.base_url = get_default_workflowy_url(base_url)
-
-    def open(self, url, *, _raw=False, _query=None, **kwargs):
-        raise NotImplementedError
-
-    def set_cookie(self, name, value):
-        raise NotImplementedError
-
-    def __getitem__(self, url):
-        return functools.partial(self.open, url)
-
-    def reset(self):
-        # TODO: support reset cookies?
-        pass
 
 
 class BuiltinBrowser(BaseBrowser):

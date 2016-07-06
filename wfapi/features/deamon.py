@@ -4,7 +4,7 @@ import threading
 import time
 
 from ..transaction import SimpleSubClientTransaction
-from ..workflowy import BaseWorkflowy
+from ..base import BaseWorkflowy
 
 __all__ = ["WFMixinDeamon"]
 

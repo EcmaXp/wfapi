@@ -3,72 +3,16 @@ import json
 import time
 from threading import Lock
 
+from .base import BaseTransaction, BaseTransactionManager
 from .error import WFTransactionError
 from .operation import OPERATION_REGISTERED, UnknownOperation
 
-__all__ = ["BaseTransaction", "ServerTransaction", "ClientTransaction",
+__all__ = ["ServerTransaction", "ClientTransaction",
     "SimpleSubClientTransaction", "DeamonSubClientTransaction",
-    "BaseTransactionManager", "TransactionManager"]
+           "TransactionManager"]
 
 # TODO: Transaction must support splited projects!
 # TODO: change method name like execute_server_transaction
-
-class BaseTransaction():
-    __slots__ = ["wf", "operations", "is_locked", "is_executed"]
-
-    def __init__(self, wf):
-        self.wf = wf # wf -> pj??
-        self.operations = []
-        self.is_executed = False
-        self.is_locked = False
-
-    def assert_pushable(self, operation=None):
-        if not self.is_locked:
-            return
-
-        if operation is None:
-            raise WFTransactionError("{!r} is locked".format(self))
-        else:
-            raise WFTransactionError("{!r} is locked, while push {!r}".format(self, operation))
-
-    def get_client_timestamp(self, current_time=None):
-        raise NotImplementedError
-
-    def push(self, operation):
-        raise NotImplementedError
-
-    def pre_operation(self):
-        for operation in self:
-            operation.pre_operation(self)
-
-    def post_operation(self):
-        for operation in self:
-            operation.post_operation(self)
-
-    def handle_enter(self):
-        pass
-    
-    def handle_exit(self, error):
-        self.is_locked = True
-        self.commit()
-
-    def __iter__(self):
-        return iter(self.operations)
-
-    def __iadd__(self, other):
-        self.push(other)
-
-    def __enter__(self):
-        self.handle_enter()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is not None:
-            self.handle_exit(error=True)
-            return False
-        else:
-            self.handle_exit(error=False)
-        return False
 
 
 class ProjectBasedTransaction(BaseTransaction):
@@ -240,10 +184,6 @@ class SimpleSubClientTransaction(ClientTransaction):
 
 class DeamonSubClientTransaction(SimpleSubClientTransaction):
     # TODO: Really need it?
-    pass
-
-
-class BaseTransactionManager():
     pass
 
 

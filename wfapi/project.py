@@ -1,22 +1,13 @@
 # -*- coding: utf-8 -*-
 import json
 
+from .base import BaseProject
 from .error import WFRuntimeError
-from .node import NodeManager, NodeManagerInterface
+from .node import NodeManager
 from .quota import *
 from .utils import attrdict, uncapdict
 
 __all__ = ["Project", "ProjectManager"]
-
-
-class BaseProjectManager():
-    pass
-
-class BaseProject(NodeManagerInterface):
-    NODE_MANAGER_CLASS = NotImplemented # type: BaseProjectManager
-    
-    def __init__(self, ptree, *, pm):
-        raise NotImplementedError
 
 
 # TODO: support auxiliaryProjectTreeInfos, mainProjectTreeInfo
