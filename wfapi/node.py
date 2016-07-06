@@ -53,7 +53,7 @@ class Node():
 
     @property
     def name(self):
-        return self.raw['nm']
+        return self.raw.get('nm')
 
     @property
     def description(self):
@@ -176,7 +176,7 @@ class Node():
 
 class WeakNode(Node):
     __slots__ = []
-    
+
     # virtual attribute
     _wf = NotImplemented
     # _project?
