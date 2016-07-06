@@ -166,21 +166,3 @@ class BaseTransactionManager():
 
 class BaseNodeManager():
     NODE_CLASS = NotImplemented
-
-
-class BaseBrowser():
-    def __init__(self, base_url=None):
-        self.base_url = get_default_workflowy_url(base_url)
-
-    def open(self, url, *, _raw=False, _query=None, **kwargs):
-        raise NotImplementedError
-
-    def set_cookie(self, name, value):
-        raise NotImplementedError
-
-    def __getitem__(self, url):
-        return functools.partial(self.open, url)
-
-    def reset(self):
-        # TODO: support reset cookies?
-        pass

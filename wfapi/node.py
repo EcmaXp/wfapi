@@ -11,18 +11,14 @@ from .operation import OperationCollection
 
 
 class Node():
-    __slots__ = ["raw", "_parent", "_context", "__weakref__"]
+    __slots__ = ["raw", "_context", "__weakref__"]
 
-    def __init__(self, projectid=None, parent=None, context=None, *, last_modified=0, name="", children=(),
+    def __init__(self, projectid=None, context=None, *, last_modified=0, name="", children=(),
                  description="", completed_at=None, shared=None):
 
         if projectid is None:
             projectid = self.generate_uuid()
 
-        if context is None:
-            context = context
-
-        self._parent = parent
         self._context = context
 
         if isinstance(projectid, dict):
@@ -41,16 +37,23 @@ class Node():
             )
 
     @property
+    def parent(self):
+        context = self._context
+        pid = self.raw['_p']
+
+        if pid is None:
+            return None
+        else:
+            return type(self)(context[pid], context=context)
+
+
+    @property
     def projectid(self):
         """
 
         :return:UUID-like string
         """
         return self.raw['id']
-
-    @property
-    def parent(self):
-        return self._parent
 
     @property
     def last_modified(self):
@@ -95,8 +98,8 @@ class Node():
             name = self.name,
             length = len(self),
             description = self.description,
-            _completed_at = vif(raw.get('cp'), ", cp={!r}".format(raw['cp']), ""),
-            _shared = vif(raw.get('shared'), ", shared={!r}".format(raw['shared']), ""),
+            _completed_at = vif(raw.get('cp'), ", cp={!r}".format(raw.get('cp')), ""),
+            _shared = vif(raw.get('shared'), ", shared={!r}".format(raw.get('shared')), ""),
         )
 
     def __bool__(self):
@@ -116,7 +119,7 @@ class Node():
         return item in childs
 
     def _get_child(self, raw):
-        return type(self)(raw, parent=self)
+        return type(self)(raw)
 
     def __iter__(self):
         projectid = self.projectid
@@ -172,14 +175,15 @@ class Node():
     def to_json(self):
         return copy.deepcopy(self.raw)
 
+    def __eq__(self, other):
+        return self.raw == other.raw
+
     @classmethod
     def from_void(cls, uuid=None, project=None):
         return cls(uuid or cls.generate_uuid(), project=project)
 
     generate_uuid = staticmethod(_utils.generate_uuid)
 
-<<<<<<< HEAD
-=======
 
 class WeakNode(Node):
     __slots__ = []
@@ -188,18 +192,17 @@ class WeakNode(Node):
     _wf = NotImplemented
     # _project?
 
->>>>>>> origin/master
     def __getattr__(self, item):
         if not item.startswith("_") and item in dir(OperationCollection):
             return functools.partial(getattr(self._context.workflowy, item), self)
 
         raise AttributeError(item)
 
-    @name.setter
+    @Node.name.setter
     def name(self, name):
         self.edit(name, None)
 
-    @description.setter
+    @Node.description.setter
     def description(self, description):
         self.edit(None, description)
 
@@ -233,17 +236,33 @@ class NodeManager(BaseNodeManager):
         self.cache = {}
 
     def __contains__(self, item):
+        if isinstance(item, Node):
+            item = item.projectid
+
         return item in self.cache
 
-    def __getitem__(self, item):
-        return self.cache[item]
+    def __getitem__(self, projectid):
+        return self.node_from_raw(self.cache[projectid])
 
     def update_root(self, root_project, root_project_children):
         self.root = self.new_root_node(root_project, root_project_children)
-
         cache = self.cache
-        for raw in self._walk():
-            cache[raw['id']] = raw
+
+        def _update_child(raw):
+            assert "id" in raw
+            projectid = raw['id']
+
+            cache[projectid] = raw
+
+            ch = raw.get("ch")
+            if ch is None:
+                return
+
+            for child in ch:
+                child['_p'] = projectid
+                _update_child(child)
+
+        _update_child(self.root.raw)
 
     def new_root_node(self, root_project, root_project_children):
         # XXX [!] project is Project, root_project is root node. ?!
@@ -254,11 +273,14 @@ class NodeManager(BaseNodeManager):
             # in shared mode, root will have uuid -(replace)> DEFAULT_ROOT_NODE_ID
 
         root_project.update(ch=root_project_children)
-        root = self.NODE_CLASS(root_project)
+        root = self.node_from_raw(root_project)
         return root
 
     def new_void_node(self):
         return self.NODE_CLASS()
+
+    def node_from_raw(self, raw):
+        return self.NODE_CLASS(raw, context=self)
 
     def _walk(self, raw=None):
         if raw is None:
@@ -275,5 +297,3 @@ class NodeManager(BaseNodeManager):
     @property
     def pretty_print(self):
         return self.root.pretty_print
-
-

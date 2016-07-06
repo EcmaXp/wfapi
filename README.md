@@ -79,8 +79,8 @@ subnode2 = node.create()
 subnode3 = node.create()
 assert node
 assert len(node) == 3
-assert subnode2 in node
-assert subnode3.parent is node
+assert subnode2 == node
+assert subnode3.parent == node
 
 # node support iter
 for some in node:

@@ -61,11 +61,21 @@ class Project(BaseProject):
         del s.root_project
         del s.root_project_children
 
-    def __contains__(self, node):
+    def __contains__(self, projectid):
         return node in self.nodemgr
 
-    def __getitem__(self, node):
-        return self.nodemgr[node]
+    def __getitem__(self, projectid):
+        return self.nodemgr[projectid]
+
+    def _find_node(self, projectid):
+        def walk(node, parent=[]):
+            for child in node:
+                node = walk(child)
+                if node is not None:
+                    return node
+
+
+        return walk(self.root.raw)
 
     def __iter__(self):
         return iter(self.nodemgr)
