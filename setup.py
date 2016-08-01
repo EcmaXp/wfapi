@@ -36,6 +36,7 @@ setup(
     long_description="\n".join(WFAPI_DOC[1:]), # change later.
     packages=[
         "wfapi",
+        "wfapi.features"
     ],
     tests_require=[
         "pytest",
