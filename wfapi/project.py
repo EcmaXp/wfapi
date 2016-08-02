@@ -4,7 +4,7 @@ import json
 from .base import BaseProject
 from .error import WFRuntimeError
 from .node import NodeManager
-from .quota import *
+from .quota import VoidQuota, SharedQuota, DefaultQuota
 from .utils import attrdict, uncapdict
 
 __all__ = ["Project", "ProjectManager"]
@@ -17,12 +17,10 @@ __all__ = ["Project", "ProjectManager"]
 
 
 class Project(BaseProject):
-    NODE_MANAGER_CLASS = NodeManager
-    
-    def __init__(self, ptree, *, pm):
+    def __init__(self, ptree, pm):
         self.status = attrdict()
         # [!] Cycle reference
-        self.nodemgr = self.NODE_MANAGER_CLASS(self)
+        self.nodemgr = NodeManager(self)
         self.quota = VoidQuota()
         self.pm = pm
         self.init(ptree)
@@ -43,13 +41,13 @@ class Project(BaseProject):
         s.most_recent_operation_transaction_id = \
             s.initial_most_recent_operation_transaction_id
         del s.initial_most_recent_operation_transaction_id
-        
+
         s.polling_interval = \
             s.initial_polling_interval_in_ms / 1000
         del s.initial_polling_interval_in_ms
-        
+
         s.is_shared = s.get("share_type") is not None
-        
+
         self.quota = (SharedQuota if "over_quota" in s else DefaultQuota)()
         self.quota.update(s)
 
@@ -57,12 +55,12 @@ class Project(BaseProject):
             s.root_project,
             s.root_project_children,
         )
-        
+
         del s.root_project
         del s.root_project_children
 
-    def __contains__(self, projectid):
-        return node in self.nodemgr
+    # def __contains__(self, projectid):
+    #     return node in self.nodemgr
 
     def __getitem__(self, projectid):
         return self.nodemgr[projectid]
@@ -73,7 +71,6 @@ class Project(BaseProject):
                 node = walk(child)
                 if node is not None:
                     return node
-
 
         return walk(self.root.raw)
 
@@ -97,13 +94,13 @@ class Project(BaseProject):
     @property
     def pretty_print(self):
         return self.nodemgr.pretty_print
-    
+
     def update_by_pushpoll(self, res):
         # like workflowy.update_by_pushpollsub
         error = res.get("error")
         if error:
             raise WFRuntimeError(error)
-        
+
         s = self.status
         s.most_recent_operation_transaction_id = \
             res.new_most_recent_operation_transaction_id
@@ -117,25 +114,22 @@ class Project(BaseProject):
 
         data = json.loads(res.server_run_operation_transaction_json)
         return data
-    
+
     def _refresh_project_tree(self):
-        nodes = self.nodes
-        main_project = self.main_project
-        root_project = self.root_project
+        # nodes = self.nodes
+        # main_project = self.main_project
+        # root_project = self.root_project
 
         # TODO: refreshing project must keep old node if uuid are same.
-        # TODO: must check root are shared. (share_id and share_type will help us.)
+        # TODO: must check root are shared. (share_id and share_type will help)
 
         raise NotImplementedError
-    
+
     def transaction(self):
         return self.wf.new_transaction(self)
 
 
 class ProjectManager():
-    MAIN_PROJECT_CLASS = Project
-    PROJECT_CLASS = Project
-
     def __init__(self, wf):
         self.wf = wf
         self.main = None
@@ -146,7 +140,7 @@ class ProjectManager():
         self.sub[:] = []
 
     def init(self, main_ptree, auxiliary_ptrees):
-        self.main = self.build_main_project(main_ptree)
+        self.main = Project(main_ptree, pm=self)
 
         for ptree in auxiliary_ptrees:
             project = self.build_project(ptree)
@@ -159,8 +153,5 @@ class ProjectManager():
         for project in self.sub:
             yield project
 
-    def build_main_project(self, ptree):
-        return self.MAIN_PROJECT_CLASS(ptree, pm=self)
-
     def build_project(self, ptree):
-        return self.PROJECT_CLASS(ptree, pm=self)
+        return Project(ptree, pm=self)

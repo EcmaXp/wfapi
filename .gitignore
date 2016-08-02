@@ -1,3 +1,7 @@
+# vim
+*.swp
+*.swo
+
 # ignore for debug only files.
 document_view.js
 result.txt

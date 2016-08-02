@@ -68,8 +68,8 @@ def main():
         else:
             node = wf.root[0]
 
-        for ch in node:
-            ch.delete()
+        for child in node:
+            child.delete()
 
     wf.pretty_print()
     

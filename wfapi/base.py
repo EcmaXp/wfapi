@@ -94,7 +94,7 @@ class BaseWorkflowy(NodeManagerInterface):
 class BaseProject(NodeManagerInterface):
     NODE_MANAGER_CLASS = NotImplemented # type: BaseProjectManager
 
-    def __init__(self, ptree, *, pm):
+    def __init__(self, ptree, pm):
         raise NotImplementedError
 
 

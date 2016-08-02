@@ -28,7 +28,7 @@ class BaseBrowser():
     def __init__(self, base_url=None):
         self.base_url = get_default_workflowy_url(base_url)
 
-    def open(self, url, *, _raw=False, _query=None, **kwargs):
+    def open(self, url, _raw=False, _query=None, **kwargs):
         raise NotImplementedError
 
     def set_cookie(self, name, value):
@@ -49,7 +49,7 @@ class BuiltinBrowser(BaseBrowser):
         self.cookie_jar = CookieJar()
         self.opener = build_opener(HTTPCookieProcessor(self.cookie_jar))
 
-    def open(self, url, *, _raw=False, _query=None, **kwargs):
+    def open(self, url, _raw=False, _query=None, **kwargs):
         full_url = urljoin(self.base_url, url)
         if _query is not None:
             full_url += "?" + urlencode(_query)
@@ -139,7 +139,7 @@ class FastBrowser(BaseBrowser):
 
         return conn
 
-    def open(self, url, *, _raw=False, _query=None, **kwargs):
+    def open(self, url, _raw=False, _query=None, **kwargs):
         full_url = urljoin(self.base_url, url)
         if _query is not None:
             full_url += "?" + urlencode(_query)

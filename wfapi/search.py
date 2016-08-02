@@ -133,7 +133,7 @@ class BaseSearcher():
     def __init__(self, pattern):
         self.pattern = pattern
 
-    def search(self, node, *, recursion=True):
+    def search(self, node, recursion=True):
         pattern = self.pattern
 
         if recursion:
