@@ -6,7 +6,7 @@ from setuptools import setup
 from setuptools.command.test import test as TestCommand
 
 WFAPI_NAME = "wfapi"
-WFAPI_VERSION = "0.6.0a4"
+WFAPI_VERSION = "0.6.0"
 WFAPI_DESC = "Workflowy's Unoffical API for Python3."
 
 with open("README.rst") as fp:

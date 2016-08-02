@@ -11,15 +11,17 @@ from .operation import OperationCollection
 
 
 class Node(object):
-    __slots__ = ["raw", "_context", "__weakref__"]
+    __slots__ = ["raw", "parent", "_context", "__weakref__"]
 
     def __init__(self, projectid=None, context=None,
-                 last_modified=0, name="", children=(),
-                 description="", completed_at=None, shared=None):
+                 last_modified=0, name="", children=[],
+                 description="", completed_at=None, shared=None,
+                 parent=None):
 
         if projectid is None:
             projectid = self.generate_uuid()
 
+        self.parent = parent
         self._context = context
 
         if isinstance(projectid, dict):
@@ -63,16 +65,6 @@ class Node(object):
         return self.raw.get('shared')
 
     @property
-    def parent(self):
-        context = self._context
-        pid = self.raw.get('_p')
-
-        if pid is None:
-            return None
-        else:
-            return type(self)(context[pid], context=context)
-
-    @property
     def is_completed(self):
         return bool(self.completed_at)
 
@@ -106,7 +98,7 @@ class Node(object):
         return len(self) > 0
 
     def __len__(self):
-        return len(self.raw.get('ch', ()))
+        return len(self.raw.get('ch', []))
 
     def __contains__(self, item):
         childs = self.raw.get('ch')
@@ -119,10 +111,10 @@ class Node(object):
         return item in childs
 
     def _get_child(self, raw):
-        return type(self)(raw)
+        return type(self)(raw, parent=self)
 
     def __iter__(self):
-        ch = self.raw.get('ch', ())
+        ch = self.raw.get('ch', [])
         return map(self._get_child, ch)
 
     def __getitem__(self, item):
