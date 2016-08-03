@@ -11,7 +11,7 @@ from .operation import OperationCollection
 
 
 class Node(object):
-    __slots__ = ["raw", "parent", "_context", "__weakref__"]
+    __slots__ = ["wf", "raw", "parent", "_context", "__weakref__"]
 
     def __init__(self, projectid=None, context=None,
                  last_modified=0, name="", children=[],
@@ -64,6 +64,24 @@ class Node(object):
     def shared(self):
         return self.raw.get('shared')
 
+    def create(self, *args, **kwargs):
+        return self._context.project.pm.wf.create(self, *args, **kwargs)
+
+    def edit(self, *args, **kwargs):
+        return self._context.project.pm.wf.edit(self, *args, **kwargs)
+
+    def complete(self, *args, **kwargs):
+        return self._context.project.pm.wf.complete(self, *args, **kwargs)
+
+    def uncomplete(self, *args, **kwargs):
+        return self._context.project.pm.wf.uncomplete(self, *args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        return self._context.project.pm.wf.delete(self, *args, **kwargs)
+
+    def search(self, *args, **kwargs):
+        return self._context.project.pm.wf.search(self, *args, **kwargs)
+
     @property
     def is_completed(self):
         return bool(self.completed_at)
@@ -110,29 +128,25 @@ class Node(object):
 
         return item in childs
 
-    def _get_child(self, raw):
-        return type(self)(raw, parent=self)
-
     def __iter__(self):
-        ch = self.raw.get('ch', [])
-        return map(self._get_child, ch)
+        for raw_child in self.raw.get('ch', []):
+            yield type(self)(raw_child, context=self._context, parent=self)
+
+    @property
+    def children(self):
+        return list(self)
 
     def __getitem__(self, item):
-        ch = self.raw.get('ch')
-        if not isinstance(item, slice):
-            if ch is None:
-                raise IndexError(item)
-
-        return self._get_child(ch[item])
+        return self.children[item]
 
     def _insert(self, index, node):
         self.raw.setdefault('ch', []).insert(index, node)
 
     def walk(self):
-        childs = list(self)
-        yield self, childs
+        children = self.children
+        yield self, children
 
-        for child in childs:
+        for child in children:
             for x in child.walk():
                 yield x
 
@@ -274,8 +288,8 @@ class NodeManager(BaseNodeManager):
         root = self.node_from_raw(root_project)
         return root
 
-    def new_void_node(self):
-        return Node()
+    def new_void_node(self, parent):
+        return Node(context=self, parent=parent)
 
     def node_from_raw(self, raw):
         return Node(raw, context=self)
