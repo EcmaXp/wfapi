@@ -1,15 +1,15 @@
 wfapi
 =====
 
-Workflowy's Unoffical API for Python3.
+Workflowy's Unofficial API for Python3.
 
-Note: This api is *UNSTABLE*.
+Note: This library is *UNSTABLE*.
 I suggest use this api with shared note for limit view.
 
 Example
 =======
 
-Normal `Workflowy` and `WeakWorkflowy`(require new class) are different.
+Normal `Workflowy` and `WeakWorkflowy`(requires new class) are different.
 ```python
 from wfapi import *
 
@@ -120,7 +120,7 @@ wf.root.pretty_print()
 # or node.pretty_print()
 ```
 
-Transaction example (only commit are supported)
+Transaction example (only commit is supported)
 ```python
 from wfapi import *
 class WeakWorkflowy(WFMixinWeak, Workflowy):
@@ -133,7 +133,7 @@ with wf.transaction():
   for i in range(10):
     subnode3.create()
 
-# also nested transaction are suppported, with thread safe.
+# threadsafe nested transactions is also suppported.
 with wf.transaction():
   with wf.transaction():
     # just delete node
