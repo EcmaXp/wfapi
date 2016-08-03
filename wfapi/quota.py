@@ -11,7 +11,7 @@ assert isinf(INF)
 
 
 class BaseQuota():
-    def __init__(self, *, used, total):
+    def __init__(self, used, total):
         self.used = used
         self.total = total
 

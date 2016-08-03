@@ -10,54 +10,43 @@ from .const import DEFAULT_ROOT_NODE_ID
 from .operation import OperationCollection
 
 
-class Node():
-    __slots__ = ["raw", "_context", "__weakref__"]
+class Node(object):
+    __slots__ = ["wf", "raw", "parent", "_context", "__weakref__"]
 
-    def __init__(self, projectid=None, context=None, *, last_modified=0, name="", children=(),
-                 description="", completed_at=None, shared=None):
+    def __init__(self, projectid=None, context=None,
+                 last_modified=0, name="", children=[],
+                 description="", completed_at=None, shared=None,
+                 parent=None):
 
         if projectid is None:
             projectid = self.generate_uuid()
 
+        self.parent = parent
         self._context = context
 
         if isinstance(projectid, dict):
             self.raw = projectid
         else:
-            assert not children or all(isinstance(node, dict) for node in children)
+            assert not children or \
+                all(isinstance(node, dict) for node in children)
 
             self.raw = dict(
-                id=projectid, # UUID-like str or DEFAULT_ROOT_NODE_ID("None")
-                lm=last_modified, # Last modified by minute (- @joined)
-                nm=name, # Name
-                ch=children, # Children
-                no=description, # Description
-                cp=completed_at, # Last complete by minuted (- @joined or None)
-                shared=shared, # Shared infomation
+                id=projectid,  # UUID-like str or DEFAULT_ROOT_NODE_ID("None")
+                lm=last_modified,  # Last modified by minute (- @joined)
+                nm=name,  # Name
+                ch=children,  # Children
+                no=description,  # Description
+                cp=completed_at,  # Last complete by minute (- @joined or None)
+                shared=shared,  # Shared infomation
             )
 
     @property
-    def parent(self):
-        context = self._context
-        pid = self.raw['_p']
-
-        if pid is None:
-            return None
-        else:
-            return type(self)(context[pid], context=context)
-
-
-    @property
     def projectid(self):
-        """
-
-        :return:UUID-like string
-        """
-        return self.raw['id']
+        return self.raw.get('id')
 
     @property
     def last_modified(self):
-        return self.raw['lm']
+        return self.raw.get('lm')
 
     @property
     def name(self):
@@ -65,19 +54,37 @@ class Node():
 
     @property
     def description(self):
-        return self.raw['no']
+        return self.raw.get('no')
 
     @property
     def completed_at(self):
-        return self.raw['cp']
+        return self.raw.get('cp')
 
     @property
     def shared(self):
-        return self.raw['shared']
+        return self.raw.get('shared')
+
+    def create(self, *args, **kwargs):
+        return self._context.project.pm.wf.create(self, *args, **kwargs)
+
+    def edit(self, *args, **kwargs):
+        return self._context.project.pm.wf.edit(self, *args, **kwargs)
+
+    def complete(self, *args, **kwargs):
+        return self._context.project.pm.wf.complete(self, *args, **kwargs)
+
+    def uncomplete(self, *args, **kwargs):
+        return self._context.project.pm.wf.uncomplete(self, *args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        return self._context.project.pm.wf.delete(self, *args, **kwargs)
+
+    def search(self, *args, **kwargs):
+        return self._context.project.pm.wf.search(self, *args, **kwargs)
 
     @property
     def is_completed(self):
-        return self.completed_at is not None
+        return bool(self.completed_at)
 
     def __repr__(self):
         return "<{clsname}({projectid!r})>".format(
@@ -86,27 +93,30 @@ class Node():
         )
 
     def __str__(self):
-        vif = lambda obj, t, f: t if obj is not None else f
-        raw = self.raw
+        completed = ", cp={!r}".format(self.completed_at) \
+            if self.completed_at is not None else ""
+        shared = ", shared={!r}".format(self.shared) \
+            if self.shared else ""
 
-        return ("{clsname}(projectid={projectid!r}, last_modified={last_modified!r}, "
-            "name={name!r}, len(self)={length!r}, description={description!r}"
-            "{_completed_at}{_shared})").format(
-            clsname = type(self).__name__,
-            projectid = self.projectid,
-            last_modified = self.last_modified,
-            name = self.name,
-            length = len(self),
-            description = self.description,
-            _completed_at = vif(raw.get('cp'), ", cp={!r}".format(raw.get('cp')), ""),
-            _shared = vif(raw.get('shared'), ", shared={!r}".format(raw.get('shared')), ""),
+        return "{clsname}(projectid={projectid!r}, "
+        "last_modified={last_modified!r}, "
+        "name={name!r}, len(self)={length!r}, description={description!r}"
+        "{_completed_at}{_shared})".format(
+            clsname=type(self).__name__,
+            projectid=self.projectid,
+            last_modified=self.last_modified,
+            name=self.name,
+            length=len(self),
+            description=self.description,
+            _completed_at=completed,
+            _shared=shared,
         )
 
     def __bool__(self):
         return len(self) > 0
 
     def __len__(self):
-        return len(self.raw.get('ch', ()))
+        return len(self.raw.get('ch', []))
 
     def __contains__(self, item):
         childs = self.raw.get('ch')
@@ -118,30 +128,25 @@ class Node():
 
         return item in childs
 
-    def _get_child(self, raw):
-        return type(self)(raw)
-
     def __iter__(self):
-        projectid = self.projectid
-        ch = self.raw.get('ch', ())
-        return map(self._get_child, ch)
+        for raw_child in self.raw.get('ch', []):
+            yield type(self)(raw_child, context=self._context, parent=self)
+
+    @property
+    def children(self):
+        return list(self)
 
     def __getitem__(self, item):
-        ch = self.raw.get('ch')
-        if not isinstance(item, slice):
-            if ch is None:
-                raise IndexError(item)
-
-        return self._get_child(ch[item])
+        return self.children[item]
 
     def _insert(self, index, node):
         self.raw.setdefault('ch', []).insert(index, node)
 
     def walk(self):
-        childs = list(self)
-        yield self, childs
+        children = self.children
+        yield self, children
 
-        for child in childs:
+        for child in children:
             for x in child.walk():
                 yield x
 
@@ -152,18 +157,25 @@ class Node():
             for x in child.fastwalk():
                 yield x
 
-    def pretty_print(self, *, stream=None, indent=0):
+    def pretty_print(self, stream=None, indent=0):
         if stream is None:
             stream = sys.stdout
 
         INDENT_SIZE = 2
-        p = lambda *args: print(" "*indent + " ".join(args), file=stream)
 
-        is_empty_root = self.projectid == DEFAULT_ROOT_NODE_ID and not self.name and indent == 0
+        def p(*args):
+            print(" " * indent + " ".join(args), file=stream)
+
+        is_empty_root = \
+            self.projectid == DEFAULT_ROOT_NODE_ID \
+            and not self.name \
+            and indent == 0
         if is_empty_root:
             p("[*]", "Home")
         else:
-            p("[%s]" % (self.raw.get('cp') and "-" or " ",), self.name, "{%s} " % self.projectid)
+            p("[%s]" % (self.raw.get('cp') and "-" or " ",),
+                self.name,
+                "{%s} " % self.projectid)
 
         for line in self.raw.get('no', "").splitlines():
             p(line)
@@ -194,7 +206,10 @@ class WeakNode(Node):
 
     def __getattr__(self, item):
         if not item.startswith("_") and item in dir(OperationCollection):
-            return functools.partial(getattr(self._context.workflowy, item), self)
+            return functools.partial(
+                getattr(self._context.workflowy, item),
+                self
+            )
 
         raise AttributeError(item)
 
@@ -206,11 +221,7 @@ class WeakNode(Node):
     def description(self, description):
         self.edit(None, description)
 
-    @property
-    def is_completed(self):
-        return bool(self.completed_at)
-
-    @is_completed.setter
+    @Node.is_completed.setter
     def is_completed(self, is_completed):
         if is_completed:
             self.complete()
@@ -220,13 +231,13 @@ class WeakNode(Node):
     @property
     def completed_at(self):
         # TODO: convert wf's timestamp to py's timestamp
-        convert = lambda x: x
-        return convert(self.raw['cp'])
+        def convert(x):
+            return x
+
+        return convert(self.completed_at)
 
 
 class NodeManager(BaseNodeManager):
-    NODE_CLASS = Node
-
     def __init__(self, project):
         super().__init__()
         # XXX [!] cycle reference
@@ -250,7 +261,7 @@ class NodeManager(BaseNodeManager):
 
         def _update_child(raw):
             assert "id" in raw
-            projectid = raw['id']
+            projectid = raw.get('id')
 
             cache[projectid] = raw
 
@@ -270,17 +281,18 @@ class NodeManager(BaseNodeManager):
             root_project = dict(id=DEFAULT_ROOT_NODE_ID)
         else:
             root_project.update(id=DEFAULT_ROOT_NODE_ID)
-            # in shared mode, root will have uuid -(replace)> DEFAULT_ROOT_NODE_ID
+            # in shared mode,
+            # root will have uuid -(replace)> DEFAULT_ROOT_NODE_ID
 
         root_project.update(ch=root_project_children)
         root = self.node_from_raw(root_project)
         return root
 
-    def new_void_node(self):
-        return self.NODE_CLASS()
+    def new_void_node(self, parent):
+        return Node(context=self, parent=parent)
 
     def node_from_raw(self, raw):
-        return self.NODE_CLASS(raw, context=self)
+        return Node(raw, context=self)
 
     def _walk(self, raw=None):
         if raw is None:
@@ -294,6 +306,5 @@ class NodeManager(BaseNodeManager):
             for child in ch:
                 yield from walk(child)
 
-    @property
     def pretty_print(self):
         return self.root.pretty_print

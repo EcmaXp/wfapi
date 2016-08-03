@@ -1,6 +1,21 @@
 wfapi changelog
 ===============
 
+## 0.6.x
+
+Bug fixes:
+
+ - many missing attributes issues, inconsistencies in nodes and avoidable errors fixed.
+ - .children and .parent are consistent and are there in all nodes.
+ - iterating children from a node is a little more efficient.
+
+Other:
+ - many lines of code removed, code is a little cleaner.
+
+Features:
+
+ - call .create, .complete, .edit, .delete directly from node object.
+
 ## 0.2.x (?)
 
 Features:

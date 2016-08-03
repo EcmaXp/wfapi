@@ -2,11 +2,11 @@
 
 import sys
 
-from setuptools import find_packages, setup
+from setuptools import setup
 from setuptools.command.test import test as TestCommand
 
 WFAPI_NAME = "wfapi"
-WFAPI_VERSION = "0.5.0a0"
+WFAPI_VERSION = "0.6.1"
 WFAPI_DESC = "Workflowy's Unoffical API for Python3."
 
 with open("README.rst") as fp:
@@ -33,7 +33,7 @@ setup(
     author_email="wfapi@ecmaxp.net",
     version=WFAPI_VERSION,
     description=WFAPI_DOC,
-    long_description="\n".join(WFAPI_DOC[1:]), # change later.
+    long_description="\n".join(WFAPI_DOC[1:]),  # change later.
     packages=[
         "wfapi",
         "wfapi.features"

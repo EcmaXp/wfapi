@@ -6,7 +6,7 @@ from .const import FEATURE_XXX_PRO_USER as _FEATURE_XXX_PRO_USER
 from .error import WFError, WFNodeError
 from .utils import attrdict
 
-__all__ = ["OperationCollection", "Operation"] # and ...
+__all__ = ["OperationCollection", "Operation"]  # and ...
 OPERATION_REGISTERED = {}
 
 
@@ -23,18 +23,17 @@ class OperationCollection(TransactionInterface):
         with self.transaction() as tr:
             tr += EditOperation(node, name, description)
 
-    def create(self, parent, priority=-1, *, node=None):
-        #import pdb; pdb.set_trace()
+    def create(self, parent, priority=-1, node=None):
+        # import pdb; pdb.set_trace()
         priority_range = range(len(parent) + 1)
 
         try:
             priority = priority_range[priority]
         except IndexError:
-            raise WFError("invalid priority are selected. (just use default value.)")
-
+            raise WFError("invalid priority is selected (use default value)")
 
         with self.transaction() as tr:
-            node = tr.project.nodemgr.new_void_node() if node is None else node
+            node = node or tr.project.nodemgr.new_void_node(parent)
             tr += CreateOperation(parent, node, priority)
 
         return node
@@ -57,7 +56,7 @@ class OperationCollection(TransactionInterface):
     def search(self, node, pattern):
         # pattern is very complex.
         # http://blog.workflowy.com/2012/09/25/hidden-search-operators/
-        raise NotImplementedError("search are not implemented yet.")
+        raise NotImplementedError("search is not implemented yet.")
 
 
 class Operation():
@@ -66,7 +65,7 @@ class Operation():
 
     def __init__(self, node):
         if self.operation_name is NotImplemented:
-            raise NotImplementedError("operation_name are NotImplemented.")
+            raise NotImplementedError("operation_name is NotImplemented.")
 
         self.node = node
         raise NotImplementedError
@@ -135,9 +134,6 @@ class Operation():
         return data
 
     def get_operation_data(self, tr):
-        raise NotImplementedError
-
-    def get_undo_data(self, tr):
         raise NotImplementedError
 
     @classmethod
@@ -256,15 +252,16 @@ class EditOperation(Operation):
 
     def get_operation_data(self, tr):
         return dict(
-            projectid = self.node.projectid,
-            name = self.name,
-            description = self.description,
+            projectid=self.node.projectid,
+            name=self.name,
+            description=self.description,
         )
 
     def get_undo_data(self, tr):
         return dict(
             previous_name=self.node.name if self.name is not None else None,
-            previous_description=self.node.description if self.description is not None else None,
+            previous_description=self.node.description
+            if self.description is not None else None,
         )
 
 
@@ -283,7 +280,7 @@ class CreateOperation(Operation):
     def post_operation(self, tr):
         self.parent._insert(self.priority, self.node.raw)
         tr.wf.add_node(self.node, update_quota=True)
-        # TODO: more good way to management node.
+        # TODO: better way to manage node.
 
     def get_operation_data(self, tr):
         return dict(
@@ -302,8 +299,7 @@ class CreateOperation(Operation):
     @classmethod
     def from_server_operation(cls, tr, projectid, parentid, priority):
         node = tr.project.nodemgr.new_void_node(projectid)
-        raw = node.raw
-        raw['lm'] = tr.get_client_timestamp()
+        node.last_modified = tr.get_client_timestamp()
         parent = tr.wf[parentid]
         return cls(parent, node, priority)
 
@@ -315,17 +311,17 @@ class _CompleteNodeOperation(Operation):
         pass
 
     def post_operation(self, tr):
-        raw = self.node.raw
-        raw['cp']
+        pass
 
     def get_operation_data(self, tr):
         return dict(
-            projectid = self.node.projectid,
+            projectid=self.node.projectid,
         )
 
     def get_undo_data(self, tr):
         return dict(
-            previous_completed=self.node.raw['cp'] if self.node.raw['cp'] is not None else False,
+           previous_completed=self.node.completed_at
+           if self.node.completed_at is not None else False,
         )
 
     @classmethod
@@ -370,19 +366,18 @@ class DeleteOperation(Operation):
     operation_name = 'delete'
 
     def __init__(self, node):
-        self.parent = node._parent
         self.node = node
-        self.priority = self.parent.raw.get('ch', ()).index(node.raw)
-        # TODO: more priority calc safety.
+        self.priority = self.node.parent.children.index(node)
+        # TODO more priority calc safety.
 
     def pre_operation(self, tr):
         pass
 
     def post_operation(self, tr):
         node = self.node
-        if self.parent:
-            assert node in self.parent
-            self.parent.raw.get('ch', []).remove(node.raw)
+        if self.node.parent:
+            assert node in self.node.parent
+            self.node.parent.raw.get('ch', []).remove(node.raw)
 
         tr.wf.remove_node(node, recursion=True)
 
@@ -393,7 +388,7 @@ class DeleteOperation(Operation):
 
     def get_undo_data(self, tr):
         return dict(
-            parentid=self.parent.projectid,
+            parentid=self.node.parent.projectid,
             priority=self.priority,
         )
 
@@ -417,18 +412,21 @@ class MoveOperation(Operation):
 
     def pre_operation(self, tr):
         assert tr.project.nodemgr.check_exist_node(self.node)
-        if self.node.parent is None:
-            raise WFNodeError("{!r} don't have parent. (possible?)".format(self.node))
-        elif self.node not in self.node.parent:
-            raise WFNodeError("{!r} not have {!r}".format(self.parent, self.node))
+        if self.parent is None:
+            raise WFNodeError(
+                "{!r} don't have parent. (possible?)".format(self.node))
+        elif self.node not in self.parent:
+            raise WFNodeError(
+                "{!r} not have {!r}".format(self.parent, self.node))
 
     def post_operation(self, tr):
-        raise NotImplementedError # TODO: fix this. (parent is missing; callback?)
+        raise NotImplementedError
+        # TODO: fix this. (parent is missing; callback?)
 
         rawnode = self.node.raw
         rawnode.parent.remove(self.node)
         rawnode.parent = self.parent
-        parent.insert(self.priority, self.node)
+        self.parent.insert(self.priority, self.node)
 
     def get_operation_data(self, tr):
         return dict(
@@ -439,11 +437,11 @@ class MoveOperation(Operation):
 
     def get_undo_data(self, tr):
         previous_priority = None
-        if self.node in self.node.parent:
-            previous_priority = self.node.parent.ch.index(self.node)
+        if self.node in self.parent:
+            previous_priority = self.parent.ch.index(self.node)
 
         return dict(
-            previous_parentid=self.node.parent.projectid,
+            previous_parentid=self.parent.projectid,
             previous_priority=previous_priority,
         )
 
@@ -470,8 +468,8 @@ class ShareOperation(Operation):
         self.write_permission = False
 
     def post_operation(self, tr):
-        rawnode = self.node
-        rawnode.shared = ...
+        # rawnode = self.node
+        # rawnode.shared = ...
         raise NotImplementedError
 
     def get_operation_data(self, tr):
@@ -559,8 +557,10 @@ class BulkCreateOperation(Operation):
         return op
 
     @classmethod
-    def from_server_operation(cls, tr, parent, project_trees, starting_priority):
-        project_trees = tr.project.nodemgr.new_node_from_json(project_trees, parent=parent)
+    def from_server_operation(cls, tr, parent, project_trees,
+                              starting_priority):
+        project_trees = \
+            tr.project.nodemgr.new_node_from_json(project_trees, parent=parent)
         return cls(parent, project_trees, starting_priority)
 
 
@@ -575,18 +575,15 @@ if _FEATURE_XXX_PRO_USER:
         operation_name = 'add_shared_email'
         NotImplemented
 
-
     @_register_operation
     class _RemoveSharedEmailOperation(Operation):
         operation_name = 'remove_shared_email'
         NotImplemented
 
-
     @_register_operation
     class _RegisterSharedEmailUserOperation(Operation):
         operation_name = 'register_shared_email_user'
         NotImplemented
-
 
     @_register_operation
     class _MakeSharedSubtreePlaceholderOperation(Operation):

@@ -10,30 +10,29 @@ import json
 from .base import BaseWorkflowy
 from .browser import DefaultBrowser
 from .const import DEFAULT_WORKFLOWY_CLIENT_VERSION
-from .error import *
+from .error import WFLoginError, WFRuntimeError
 from .operation import OperationCollection
 from .project import ProjectManager
 from .tools import get_globals_from_home
 from .transaction import TransactionManager
-from .utils import *
+from .utils import attrdict, pprint, capture_http404, generate_tid
 
 __all__ = ["Workflowy"]
 
 
 class Workflowy(BaseWorkflowy, OperationCollection):
     client_version = DEFAULT_WORKFLOWY_CLIENT_VERSION
-    PROJECT_MANAGER_CLASS = ProjectManager
-    TRANSACTION_MANAGER_CLASS = TransactionManager
 
-    def __init__(self, share_id=None, *, sessionid=None, username=None, password=None):
+    def __init__(self, share_id=None, sessionid=None,
+                 username=None, password=None):
         self._inited = False
 
         # TODO: proxy self for remove leak
         self.browser = DefaultBrowser()
         self.globals = attrdict()
         self.settings = attrdict()
-        self.pm = self.PROJECT_MANAGER_CLASS(self)
-        self.tm = self.TRANSACTION_MANAGER_CLASS(self)
+        self.pm = ProjectManager(self)
+        self.tm = TransactionManager(self)
 
         if sessionid is not None or username is not None:
             username_or_sessionid = sessionid or username
@@ -42,12 +41,8 @@ class Workflowy(BaseWorkflowy, OperationCollection):
         self.init(share_id)
 
     @property
-    def main(self):
-        return self.pm.main
-
-    @property
     def root(self):
-        return self.main.root
+        return self.pm.main.root
 
     def _reset(self):
         self.handle_reset()
@@ -60,19 +55,21 @@ class Workflowy(BaseWorkflowy, OperationCollection):
         self.tm.clear()
 
     def __contains__(self, node):
-        return node in self.main
+        return node in self.pm.main
 
     def __getitem__(self, node):
-        return self.main[node]
+        return self.pm.main[node]
 
     def __iter__(self):
-        return iter(self.main)
+        return iter(self.pm.main)
 
     def add_node(self, node, recursion=True, update_quota=True):
-        self.main.add_node(node, recursion=recursion, update_quota=update_quota)
+        self.pm.main.add_node(node, recursion=recursion,
+                              update_quota=update_quota)
 
     def remove_node(self, node, recursion=False, update_quota=True):
-        self.main.remove_node(node, recursion=recursion, update_quota=update_quota)
+        self.pm.main.remove_node(node, recursion=recursion,
+                                 update_quota=update_quota)
 
     def print_status(self):
         pprint(vars(self), width=240)
@@ -84,7 +81,8 @@ class Workflowy(BaseWorkflowy, OperationCollection):
     def handle_logout(self):
         self._login_failed()
 
-    def login(self, username_or_sessionid, password=None, *, auto_init=True, use_ajax_login=True):
+    def login(self, username_or_sessionid, password=None,
+              auto_init=True, use_ajax_login=True):
         home_content = None
 
         if password is None:
@@ -93,20 +91,21 @@ class Workflowy(BaseWorkflowy, OperationCollection):
         else:
             username = username_or_sessionid
             if use_ajax_login:
-                res, data = self.browser["ajax_login"](username=username, password=password)
+                res, data = self.browser["ajax_login"](username=username,
+                                                       password=password)
                 errors = data.get("errors")
                 if errors:
                     # 'errors' or 'success'
                     self._login_failed()
             else:
-                res, data = self.browser["accounts/login/"](username=username, password=password, next="", _raw=True)
+                res, data = self.browser["accounts/login/"](
+                    username=username, password=password, next="", _raw=True)
                 home_content = data
 
         if auto_init:
             return self.init(home_content=home_content)
 
     def _get_initialization_data(self, share_id=None):
-        url = "get_initialization_data"
         info = dict(
             client_version=self.client_version,
         )
@@ -124,8 +123,8 @@ class Workflowy(BaseWorkflowy, OperationCollection):
         except WFLoginError:
             self.handle_logout()
             return get_initialization_data()
-        
-    def _init(self, share_id=None, *, home_content=None):
+
+    def _init(self, share_id=None, home_content=None):
         data = self._get_initialization_data(share_id=share_id)
 
         if home_content is None:
@@ -135,59 +134,59 @@ class Workflowy(BaseWorkflowy, OperationCollection):
         data = attrdict(data)
         self.globals.update(data.globals)
         self.settings.update(data.settings)
-        
+
         ptree = data["projectTreeData"]
         self.pm.init(
             ptree["mainProjectTreeInfo"],
             ptree["auxiliaryProjectTreeInfos"],
         )
-        
+
         self.client_id = ptree["clientId"]
         self.handle_init()
         self.inited = True
 
-    def transaction(self, project=None, *, force_new_transaction=False):
+    def transaction(self, project=None, force_new_transaction=False):
         assert not force_new_transaction
         if project is None:
-            project = self.main
-        
+            project = self.pm.main
+
         return self.tm.new_transaction(project)
 
     def new_transaction(self, project):
         return self.transaction(project)
 
     def _refresh_project_tree(self):
-        nodes = self.nodes
-        main_project = self.main_project
-        root_project = self.root_project
+        # nodes = self.nodes
+        # main_project = self.pm.main_project
+        # root_project = self.root_project
 
-        # TODO: refreshing project must keep old node if uuid are same.
-        # TODO: must check root are shared. (share_id and share_type will help us.)
+        # TODO refreshing project must keep old node if uuid are same.
+        # TODO must check root are shared (share_id and share_type will help)
 
         raise NotImplementedError
 
-    def push_and_poll(self, transactions=None, *, from_tm=False):
+    def push_and_poll(self, transactions=None, from_tm=False):
         assert from_tm is True
         if transactions is None:
             transactions = []
-        
+
         info = self._push_and_poll(transactions)
         self._handle_errors_by_push_and_poll(info)
-        
+
         if not from_tm:
             return self.tm._execute_server_transactions(info)
-        
+
         return map(attrdict, info.get("results", []))
 
     def _push_and_poll(self, transactions):
-        info = dict (
+        info = dict(
             client_id=self.client_id,
             client_version=self.client_version,
             push_poll_id=generate_tid(),
             push_poll_data=json.dumps(transactions),
         )
 
-        mpstatus = self.main.status
+        mpstatus = self.pm.main.status
         if mpstatus.get("share_type") is not None:
             assert mpstatus.share_type == "url"
             info.update(share_id=mpstatus.share_id)
@@ -202,14 +201,15 @@ class Workflowy(BaseWorkflowy, OperationCollection):
 
         logged_out = data.get("logged_out")
         if logged_out:
-            raise WFLoginError("logout detected, don't share session with real user.")
+            raise WFLoginError("logout detected, don't share "
+                               "session with real user.")
 
     def pretty_print(self):
-        self.main.pretty_print()
-        
+        self.pm.main.pretty_print()
+
         # TODO: sub project?
         for project in self.pm:
-            if self.main == project:
+            if self.pm.main == project:
                 continue
-            
+
             project.pretty_print()
