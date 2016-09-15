@@ -3,39 +3,69 @@ import json
 import time
 from threading import Lock
 
-from .base import BaseTransaction, BaseTransactionManager
 from .error import WFTransactionError
 from .operation import OPERATION_REGISTERED, UnknownOperation
 
-__all__ = ["ServerTransaction", "ClientTransaction",
-    "SimpleSubClientTransaction", "DeamonSubClientTransaction",
-           "TransactionManager"]
-
-# TODO: Transaction must support splited projects!
-# TODO: change method name like execute_server_transaction
+#__all__ = ["ServerTransaction", "ClientTransaction",
+#           "TransactionManager"]
 
 
-class ProjectBasedTransaction(BaseTransaction):
+class BaseTransactions():
+    def __init__(self, wf):
+        self.wf = wf # wf -> pj??
+        self.operations = []
+        self.is_executed = False
+
+    def get_client_timestamp(self, current_time=None):
+        raise NotImplementedError
+
+    def push(self, operation):
+        raise NotImplementedError
+
+    def pre_operation(self):
+        for operation in self:
+            operation.pre_operation(self)
+
+    def post_operation(self):
+        for operation in self:
+            operation.post_operation(self)
+
+    def handle_enter(self):
+        pass
+
+    def handle_exit(self, error):
+        if not self.is_executed:
+            self.is_executed = True
+
+    def __iter__(self):
+        return iter(self.operations)
+
+    def __iadd__(self, other):
+        self.push(other)
+
+    def __enter__(self):
+        self.handle_enter()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            self.handle_exit(error=True)
+            return False
+        else:
+            self.handle_exit(error=False)
+
+        return False
+
+
+class ProjectBasedTransactions(BaseTransactions):
     __slots__ = ["project"]
-    
+
     def __init__(self, wf, project):
         super().__init__(wf)
         self.project = project
 
-    def handle_exit(self, error):
-        self.is_locked = True
-        if not self.is_executed:
-            self.commit()
-            self.is_executed = True
 
-    def commit(self):
-        raise NotImplementedError
-
-    def rollback(self):
-        raise NotImplementedError
-
-
-class ServerTransaction(ProjectBasedTransaction):
+class ServerTransactions(ProjectBasedTransactions):
     def __init__(self, wf, project, client_tr, client_timestamp):
         super().__init__(wf, project)
         self.client_timestamp = client_timestamp
@@ -96,11 +126,10 @@ class ServerTransaction(ProjectBasedTransaction):
         raise AssertionError("rollback are not supported")
 
 
-class ClientTransaction(ProjectBasedTransaction):
+class ClientTransactions(ProjectBasedTransactions):
     def __init__(self, wf, tm, project):
         super().__init__(wf, project)
         self.tm = tm
-        self.level = 0
     
     def get_client_timestamp(self, current_time=None):
         if current_time is None:
@@ -117,6 +146,8 @@ class ClientTransaction(ProjectBasedTransaction):
 
         operation.pre_operation(self)
         self.operations.append(operation)
+
+        # TODO: DO NOT APPLY POST_OPERATION?
         operation.post_operation(self)
 
     def get_operations_json(self):
@@ -147,95 +178,49 @@ class ClientTransaction(ProjectBasedTransaction):
         return transaction
 
     def handle_enter(self):
-        self.level += 1
+        self.tm.enter_transactions(self)
 
     def handle_exit(self, error):
-        self.level -= 1
-        if self.level == 0:
-            if self.is_executed:
-                raise WFTransactionError("{!r} is already executed".format(self))
+        if self.is_executed:
+            raise WFTransactionError("{!r} is already executed".format(self))
 
-            super().handle_exit(error)
-            self.tm.callback_out(self)
-
-    def commit(self):
-        return self.get_transaction_json()
-
-    def rollback(self):
-        raise NotImplementedError
+        super().handle_exit(error)
+        self.tm.leave_transactions(self)
 
 
-class SimpleSubClientTransaction(ClientTransaction):
-    def __init__(self, wf, tr):
-        self.wf = wf
-        self.tr = tr
-
-    @property
-    def operations(self):
-        return self.tr.operations
-
-    def commit(self):
-        # already operation are appended to main transaction.
-        assert not self.tr.is_executed
-
-    def rollback(self):
-        raise NotImplementedError
-
-
-class DeamonSubClientTransaction(SimpleSubClientTransaction):
-    # TODO: Really need it?
-    pass
-
-
-class TransactionManager(BaseTransactionManager):
+class TransactionManager():
     def __init__(self, wf):
-        self.wf = wf
-        self.lock = Lock()
-        self.current_transactions = {}
-
-    def clear(self):
-        raise NotImplementedError
+        # [!] REF CYCLE
+        import weakref
+        self.wf = weakref.proxy(wf)
+        # TODO: thread safe is invaild now..
+        self.stack = []
+        self.operations = []
 
     def commit(self):
-        with self.lock:
-            transactions = self._execute_current_client_transactions()
-            transactions = self.wf.push_and_poll(transactions, from_tm=True)
-            self._execute_server_transactions(transactions)
+        self.wf.push_and_poll(self.operations)
+        self.operations = []
 
     def new_transaction(self, project):
         pm = self.wf.pm
         assert project in pm
 
-        with self.lock:
-            ctrs = self.current_transactions
+        return ClientTransactions(self, project)
 
-            tr = ctrs.get(project)
-            if tr is None:
-                ctrs[project] = tr = ClientTransaction(self.wf, self, project)
+    def enter_transaction(self, transactions:ClientTransactions):
+        self.tm.stack.append(self)
 
-            return tr
+    def leave_transaction(self, transactions:ClientTransactions):
+        last_transaction = self.stack.pop()
+        assert transactions is last_transaction
 
-    def callback_out(self, tr):
-        old_tr = self.current_transactions[tr.project]
-        assert tr is old_tr
-        if tr.level > 0:
-            return
+        data = transactions.get_operations_json()
+        self.operations.append(data)
 
-        for tr in self.current_transactions.values():
-            if tr.level > 0:
-                break
-        else:
+        if not self.stack:
             self.commit()
-            self.current_transactions.clear()
 
-    def _execute_current_client_transactions(self):
-        transactions = []
-        for project, transaction in self.current_transactions.items():
-            transactions.append(transaction.commit())
-
-        return transactions
-
-    def _execute_server_transactions(self, transactions):
+    def _execute_server_transactions(self, data):
         pm = self.wf.pm
 
         project_map = {}
@@ -245,22 +230,13 @@ class TransactionManager(BaseTransactionManager):
             assert share_id not in project_map
             project_map[share_id] = project
 
-        ctrs = self.current_transactions
-        for transaction in transactions:
+        for transaction in data:
             share_id = transaction.get("share_id")
             project = project_map[share_id]
 
-            client_transaction = ctrs.get(project)
-            if client_transaction is None:
-                # What if just don't give shared transaction
-                #  workflowy don't give changed result?
-                print("workflowy give transaction even if not commit transaction", project, client_transaction, transactions)
-                assert False
-
-            server_transaction = ServerTransaction.from_server(
+            server_transaction = ServerTransactions.from_server(
                 self.wf,
                 project,
-                client_transaction,
                 transaction,
             )
 

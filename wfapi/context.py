@@ -1,14 +1,12 @@
 import weakref
-from .base import BaseWorkflowy, BaseTransaction, BaseProject
-from .project import BaseProject
-from .transaction import BaseTransaction
+from .workflowy import BaseWorkflowy
+from .operation import OperationCollection
 
-# TODO: assign activated context.
-class WFContext():
-    def __init__(self, workflowy:BaseWorkflowy, project:BaseProject):
+
+class WFContext(OperationCollection):
+    def __init__(self, workflowy:BaseWorkflowy, project):
         self.workflowy = workflowy
         self.project = weakref.ref(project)
-        self.transactions = []
 
-    def push_transaction(self, transaction:BaseTransaction):
-        pass
+    def transaction(self):
+        return self.workflowy.transaction(self.context)

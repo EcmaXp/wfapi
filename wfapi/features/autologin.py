@@ -5,7 +5,7 @@ import sys
 from collections import namedtuple
 
 from ..error import WFLoginError, WFUnsupportedFeature
-from ..base import BaseWorkflowy
+from ..workflowy import BaseWorkflowy
 
 __all__ = ["WFMixinAutoLogin"]
 

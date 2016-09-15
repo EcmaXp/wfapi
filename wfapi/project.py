@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 import json
-
-from .base import BaseProject
+import weakref
+from weakref import WeakValueDictionary
+from .const import DEFAULT_ROOT_NODE_ID
+from .node import Node
 from .error import WFRuntimeError
-from .node import NodeManager
 from .quota import VoidQuota, SharedQuota, DefaultQuota
-from .utils import attrdict, uncapdict
+from .tools import attrdict, uncapdict, generate_uuid
+from .context import WFContext
+
 
 __all__ = ["Project", "ProjectManager"]
 
@@ -16,22 +19,26 @@ __all__ = ["Project", "ProjectManager"]
 # TODO: embedded support in here, and node's support are in node.embedded
 
 
-class Project(BaseProject):
-    def __init__(self, ptree, pm):
+class Project():
+    def __init__(self, workflowy, ptree):
+        self.context = WFContext(workflowy, weakref.proxy(self))
         self.status = attrdict()
-        # [!] Cycle reference
-        self.nodemgr = NodeManager(self)
         self.quota = VoidQuota()
-        self.pm = pm
+
+        self.data = WeakValueDictionary()
+        self.root = None
+        self.cache = {}
+
         self.init(ptree)
 
-    @property
-    def wf(self):
-        return self.pm.wf
+    def __contains__(self, item):
+        if isinstance(item, Node):
+            item = item.projectid
 
-    @property
-    def root(self):
-        return self.nodemgr.root
+        return item in self.cache
+
+    def __getitem__(self, projectid):
+        return self.node_from_raw(self.cache[projectid])
 
     def init(self, ptree):
         # TODO: support auxiliaryProjectTreeInfos for embbed node.
@@ -51,7 +58,7 @@ class Project(BaseProject):
         self.quota = (SharedQuota if "over_quota" in s else DefaultQuota)()
         self.quota.update(s)
 
-        self.nodemgr.update_root(
+        self.update_root(
             s.root_project,
             s.root_project_children,
         )
@@ -59,23 +66,58 @@ class Project(BaseProject):
         del s.root_project
         del s.root_project_children
 
-    # def __contains__(self, projectid):
-    #     return node in self.nodemgr
+    def update_root(self, root_project, root_project_children):
+        self.root = self.new_root_node(root_project, root_project_children)
+        cache = self.cache
 
-    def __getitem__(self, projectid):
-        return self.nodemgr[projectid]
+        # TODO: how to cache parent?
 
-    def _find_node(self, projectid):
-        def walk(node, parent=[]):
-            for child in node:
-                node = walk(child)
-                if node is not None:
-                    return node
+        def _update_child(raw):
+            assert "id" in raw
+            projectid = raw.get('id')
 
-        return walk(self.root.raw)
+            cache[projectid] = raw
 
-    def __iter__(self):
-        return iter(self.nodemgr)
+            ch = raw.get("ch")
+            if ch is None:
+                return
+
+            for child in ch:
+                child['_p'] = projectid
+                _update_child(child)
+
+        _update_child(self.root.raw)
+
+    def new_root_node(self, root_project, root_project_children):
+        # XXX [!] project is Project, root_project is root node. ?!
+        if root_project is None:
+            root_project = dict(id=DEFAULT_ROOT_NODE_ID)
+        else:
+            root_project.update(id=DEFAULT_ROOT_NODE_ID)
+            # in shared mode,
+            # root will have uuid -(replace)> DEFAULT_ROOT_NODE_ID
+
+        root_project.update(ch=root_project_children)
+        root = self.node_from_raw(root_project)
+        return root
+
+    def new_void_node(self, parent):
+        return Node(self.context, {'id': generate_uuid})
+
+    def node_from_raw(self, raw):
+        return Node(self.context, raw)
+
+    def _walk(self, raw=None):
+        if raw is None:
+            raw = self.root.raw
+
+        yield raw
+
+        ch = raw.get("ch")
+        if ch is not None:
+            walk = self._walk
+            for child in ch:
+                yield from walk(child)
 
     def add_node(self, node, recursion=True, update_quota=True):
         NotImplemented
@@ -90,10 +132,6 @@ class Project(BaseProject):
 
         if update_quota:
             self.quota -= removed_nodes
-
-    @property
-    def pretty_print(self):
-        return self.nodemgr.pretty_print
 
     def update_by_pushpoll(self, res):
         # like workflowy.update_by_pushpollsub
@@ -116,22 +154,18 @@ class Project(BaseProject):
         return data
 
     def _refresh_project_tree(self):
-        # nodes = self.nodes
-        # main_project = self.main_project
-        # root_project = self.root_project
-
         # TODO: refreshing project must keep old node if uuid are same.
         # TODO: must check root are shared. (share_id and share_type will help)
 
         raise NotImplementedError
 
-    def transaction(self):
-        return self.wf.new_transaction(self)
+    @property
+    def pretty_print(self):
+        return self.root.pretty_print
 
 
 class ProjectManager():
-    def __init__(self, wf):
-        self.wf = wf
+    def __init__(self):
         self.main = None
         self.sub = []
 
@@ -140,7 +174,7 @@ class ProjectManager():
         self.sub[:] = []
 
     def init(self, main_ptree, auxiliary_ptrees):
-        self.main = Project(main_ptree, pm=self)
+        self.main = Project(main_ptree)
 
         for ptree in auxiliary_ptrees:
             project = self.build_project(ptree)
@@ -154,4 +188,4 @@ class ProjectManager():
             yield project
 
     def build_project(self, ptree):
-        return Project(ptree, pm=self)
+        return Project(ptree)

@@ -6,8 +6,8 @@ from setuptools import setup
 from setuptools.command.test import test as TestCommand
 
 WFAPI_NAME = "wfapi"
-WFAPI_VERSION = "0.6.1"
-WFAPI_DESC = "Workflowy's Unoffical API for Python3."
+WFAPI_VERSION = "0.7.0"
+WFAPI_DESC = "Workflowy's Unoffical API for Python"
 
 with open("README.rst") as fp:
     WFAPI_DOC = fp.read()
@@ -42,6 +42,9 @@ setup(
         "pytest",
         "sphinx",
         "sphinx_rtd_theme",
+    ],
+    require=[
+        "requests",
     ],
     cmdclass={
         'test': PyTest,

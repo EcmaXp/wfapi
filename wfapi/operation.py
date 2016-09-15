@@ -4,7 +4,7 @@ import warnings
 
 from .const import FEATURE_XXX_PRO_USER as _FEATURE_XXX_PRO_USER
 from .error import WFError, WFNodeError
-from .utils import attrdict
+from .tools import attrdict
 
 __all__ = ["OperationCollection", "Operation"]  # and ...
 OPERATION_REGISTERED = {}
@@ -24,7 +24,6 @@ class OperationCollection(TransactionInterface):
             tr += EditOperation(node, name, description)
 
     def create(self, parent, priority=-1, node=None):
-        # import pdb; pdb.set_trace()
         priority_range = range(len(parent) + 1)
 
         try:
@@ -298,7 +297,7 @@ class CreateOperation(Operation):
 
     @classmethod
     def from_server_operation(cls, tr, projectid, parentid, priority):
-        node = tr.project.nodemgr.new_void_node(projectid)
+        node = tr.project.new_void_node(projectid)
         node.last_modified = tr.get_client_timestamp()
         parent = tr.wf[parentid]
         return cls(parent, node, priority)
