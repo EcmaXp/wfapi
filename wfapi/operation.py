@@ -2,7 +2,6 @@
 import json
 import warnings
 
-from .const import FEATURE_XXX_PRO_USER as _FEATURE_XXX_PRO_USER
 from .error import WFError, WFNodeError
 from .tools import attrdict
 
@@ -32,7 +31,7 @@ class OperationCollection(TransactionInterface):
             raise WFError("invalid priority is selected (use default value)")
 
         with self.transaction() as tr:
-            node = node or tr.project.nodemgr.new_void_node(parent)
+            node = node or tr.project.new_void_node()
             tr += CreateOperation(parent, node, priority)
 
         return node
@@ -106,6 +105,7 @@ class Operation():
         operation.update(
             client_timestamp=tr.get_client_timestamp(),
             undo_data=self.get_undo(tr),
+            executed_by=12345,
         )
 
         # must filter by _empty_data_filter, but it lagging?
@@ -201,7 +201,6 @@ class UnknownOperation(Operation):
     def post_operation(self, tr):
         # TODO: how to warning?
         warnings.warn("Unknown %s operation detected." % self.operation_name)
-        print(self)
 
     def get_operation_data(self, tr):
         return self.data
@@ -278,6 +277,7 @@ class CreateOperation(Operation):
 
     def post_operation(self, tr):
         self.parent._insert(self.priority, self.node.raw)
+        # TODO: register parent
         tr.wf.add_node(self.node, update_quota=True)
         # TODO: better way to manage node.
 
@@ -287,6 +287,9 @@ class CreateOperation(Operation):
             parentid=self.parent.projectid,
             priority=self.priority,
         )
+
+    def get_default_undo_data(self):
+        return dict()
 
     def get_undo_data(self, tr):
         return {}
@@ -298,7 +301,9 @@ class CreateOperation(Operation):
     @classmethod
     def from_server_operation(cls, tr, projectid, parentid, priority):
         node = tr.project.new_void_node(projectid)
-        node.last_modified = tr.get_client_timestamp()
+        node.raw['nm'] = ""
+        node.raw['lm'] = tr.get_client_timestamp()
+        # TODO: lmb support (lm extend)
         parent = tr.wf[parentid]
         return cls(parent, node, priority)
 
@@ -566,25 +571,3 @@ class BulkCreateOperation(Operation):
 class BulkMoveOperation(Operation):
     operation_name = 'bulk_move'
     NotImplemented
-
-
-if _FEATURE_XXX_PRO_USER:
-    @_register_operation
-    class _AddSharedEmailOperation(Operation):
-        operation_name = 'add_shared_email'
-        NotImplemented
-
-    @_register_operation
-    class _RemoveSharedEmailOperation(Operation):
-        operation_name = 'remove_shared_email'
-        NotImplemented
-
-    @_register_operation
-    class _RegisterSharedEmailUserOperation(Operation):
-        operation_name = 'register_shared_email_user'
-        NotImplemented
-
-    @_register_operation
-    class _MakeSharedSubtreePlaceholderOperation(Operation):
-        operation_name = 'make_shared_subtree_placeholder'
-        NotImplemented

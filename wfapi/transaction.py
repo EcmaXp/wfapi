@@ -6,8 +6,7 @@ from threading import Lock
 from .error import WFTransactionError
 from .operation import OPERATION_REGISTERED, UnknownOperation
 
-#__all__ = ["ServerTransaction", "ClientTransaction",
-#           "TransactionManager"]
+__all__ = ["ServerTransaction", "ClientTransactions", "TransactionManager"]
 
 
 class BaseTransactions():
@@ -42,6 +41,7 @@ class BaseTransactions():
 
     def __iadd__(self, other):
         self.push(other)
+        return self
 
     def __enter__(self):
         self.handle_enter()
@@ -50,7 +50,6 @@ class BaseTransactions():
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is not None:
             self.handle_exit(error=True)
-            return False
         else:
             self.handle_exit(error=False)
 
@@ -65,72 +64,11 @@ class ProjectBasedTransactions(BaseTransactions):
         self.project = project
 
 
-class ServerTransactions(ProjectBasedTransactions):
-    def __init__(self, wf, project, client_tr, client_timestamp):
-        super().__init__(wf, project)
-        self.client_timestamp = client_timestamp
-        self.client_transaction = client_tr
-
-    @classmethod
-    def from_server(cls, wf, project, client_tr, data):
-        # TODO: find reason why wrapped?
-        data = json.loads(data.server_run_operation_transaction_json)
-
-        client_timestamp = data["client_timestamp"]
-        self = cls(wf, project, client_tr, client_timestamp)
-
-        client_operations = list(self.get_client_operations_json())
-        def pop_client_operation():
-            if client_operations:
-                return client_operations.pop(0)
-
-            return None
-
-        current_client_operation = pop_client_operation()
-
-        for op in data["ops"]:
-            op.pop("server_data", None)
-            # server_data are exists when server_info
-
-            if current_client_operation == op:
-                # is it safe?
-                current_client_operation = pop_client_operation()
-                continue
-
-            # TODO: change OPERATOR_COLLECTION?
-            operator = OPERATION_REGISTERED.get(op["type"], UnknownOperation)
-            operation = operator.from_server_operation_json(self, op)
-            self.push(operation)
-
-        return self
-
-    def get_client_operations_json(self):
-        client_tr = self.client_transaction
-        for operation in client_tr:
-            yield operation.get_cached_operation(client_tr)
-            # not get_client_operation
-
-    def get_client_timestamp(self, current_time=None):
-        assert current_time is None
-        return self.client_timestamp
-
-    def push(self, operation):
-        self.assert_pushable(operation)
-        self.operations.append(operation)
-
-    def commit(self):
-        self.pre_operation()
-        self.post_operation()
-
-    def rollback(self):
-        raise AssertionError("rollback are not supported")
-
-
 class ClientTransactions(ProjectBasedTransactions):
     def __init__(self, wf, tm, project):
         super().__init__(wf, project)
         self.tm = tm
-    
+
     def get_client_timestamp(self, current_time=None):
         if current_time is None:
             current_time = time.time()
@@ -140,15 +78,8 @@ class ClientTransactions(ProjectBasedTransactions):
         return (current_time - pstatus.date_joined_timestamp_in_seconds) // 60
 
     def push(self, operation):
-        # TODO: determine good position for pre_operation and post_operation
-        # XXX: if pre_operation and post_operation in push_poll function, transaction are not work.
-        self.assert_pushable(operation)
-
         operation.pre_operation(self)
         self.operations.append(operation)
-
-        # TODO: DO NOT APPLY POST_OPERATION?
-        operation.post_operation(self)
 
     def get_operations_json(self):
         operations = []
@@ -157,18 +88,16 @@ class ClientTransactions(ProjectBasedTransactions):
 
         return operations
 
-    def get_transaction_json(self, operations=None):
+    def get_transaction_json(self):
         pstatus = self.project.status
-        
-        if operations is None:
-            operations = self.get_operations_json()
+        operations = self.get_operations_json()
 
         transaction = dict(
-            most_recent_operation_transaction_id = 
+            most_recent_operation_transaction_id=
                 pstatus.most_recent_operation_transaction_id,
             operations=operations,
         )
-        
+
         if pstatus.is_shared:
             assert pstatus.share_type == "url"
             transaction.update(
@@ -178,14 +107,45 @@ class ClientTransactions(ProjectBasedTransactions):
         return transaction
 
     def handle_enter(self):
-        self.tm.enter_transactions(self)
+        self.tm.enter_transaction(self)
 
     def handle_exit(self, error):
+        if error:
+            return
+
         if self.is_executed:
             raise WFTransactionError("{!r} is already executed".format(self))
 
         super().handle_exit(error)
-        self.tm.leave_transactions(self)
+        self.tm.leave_transaction(self)
+
+
+class ServerTransactions(ProjectBasedTransactions):
+    def __init__(self, wf, project, client_timestamp):
+        super().__init__(wf, project)
+        self.client_timestamp = client_timestamp
+
+    @classmethod
+    def from_server(cls, wf, project, info):
+        data = json.loads(info.server_run_operation_transaction_json)
+        self = cls(wf, project, data["client_timestamp"])
+
+        for op in data["ops"]:
+            op.pop("server_data", None)
+            # server_data are exists when server_info
+
+            # TODO: change OPERATOR_COLLECTION?
+            operator = OPERATION_REGISTERED.get(op["type"], UnknownOperation)
+            operation = operator.from_server_operation_json(self, op)
+            self.operations.append(operation)
+
+        # info.concurrent_remote_operation_transactions => nested transactions
+
+        return self
+
+    def get_client_timestamp(self, current_time=None):
+        assert current_time is None
+        return self.client_timestamp
 
 
 class TransactionManager():
@@ -197,30 +157,33 @@ class TransactionManager():
         self.stack = []
         self.operations = []
 
-    def commit(self):
-        self.wf.push_and_poll(self.operations)
-        self.operations = []
-
     def new_transaction(self, project):
         pm = self.wf.pm
         assert project in pm
 
-        return ClientTransactions(self, project)
+        return ClientTransactions(self.wf, self, project)
 
     def enter_transaction(self, transactions:ClientTransactions):
-        self.tm.stack.append(self)
+        self.stack.append(transactions)
 
     def leave_transaction(self, transactions:ClientTransactions):
-        last_transaction = self.stack.pop()
-        assert transactions is last_transaction
+        last_transaction = self.stack.pop(-1)
+        assert transactions is last_transaction, (transactions, last_transaction)
 
-        data = transactions.get_operations_json()
+        transactions.pre_operation()
+        data = transactions.get_transaction_json()
         self.operations.append(data)
 
         if not self.stack:
             self.commit()
 
-    def _execute_server_transactions(self, data):
+    def commit(self):
+        data = self.wf.push_and_poll(self.operations)
+        self.operations = []
+
+        self._execute_server_transactions(data)
+
+    def _execute_server_transactions(self, info):
         pm = self.wf.pm
 
         project_map = {}
@@ -230,14 +193,18 @@ class TransactionManager():
             assert share_id not in project_map
             project_map[share_id] = project
 
-        for transaction in data:
-            share_id = transaction.get("share_id")
+        for data in info:
+            share_id = data.get("share_id")
             project = project_map[share_id]
 
-            server_transaction = ServerTransactions.from_server(
+            transactions = ServerTransactions.from_server(
                 self.wf,
                 project,
-                transaction,
+                data,
             )
 
-            server_transaction.commit()
+            transactions.post_operation()
+
+            for data in data.concurrent_remote_operation_transactions:
+                print(data)
+                pass

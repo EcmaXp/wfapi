@@ -5,7 +5,8 @@ import sys
 from collections import namedtuple
 
 from ..error import WFLoginError, WFUnsupportedFeature
-from ..workflowy import BaseWorkflowy
+from ..workflowy import Workflowy
+
 
 __all__ = ["WFMixinAutoLogin"]
 
@@ -78,16 +79,16 @@ del _SafeSupport
 AuthInfo = namedtuple("AuthInfo", "username, password")
 
 
-class WFMixinAutoLogin(BaseWorkflowy):
+class WFMixinAutoLogin(Workflowy):
     def __init__(self, *args, **kwargs):
         self.share_id = None
         self.auth = None
         super().__init__(*args, **kwargs)
 
-    def _reset(self):
+    def reset(self):
+        super().reset()
         self.share_id = None
         self.auth = None
-        super()._reset()
 
     def login(self, username_or_sessionid, password=None, **kwargs):
         if password is not None:

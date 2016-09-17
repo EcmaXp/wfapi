@@ -46,12 +46,10 @@ class Project():
         s.update(uncapdict(ptree))
 
         s.most_recent_operation_transaction_id = \
-            s.initial_most_recent_operation_transaction_id
-        del s.initial_most_recent_operation_transaction_id
+            s.pop("initial_most_recent_operation_transaction_id")
 
         s.polling_interval = \
-            s.initial_polling_interval_in_ms / 1000
-        del s.initial_polling_interval_in_ms
+            s.pop("initial_polling_interval_in_ms") / 1000
 
         s.is_shared = s.get("share_type") is not None
 
@@ -59,12 +57,9 @@ class Project():
         self.quota.update(s)
 
         self.update_root(
-            s.root_project,
-            s.root_project_children,
+            s.pop("root_project"),
+            s.pop("root_project_children"),
         )
-
-        del s.root_project
-        del s.root_project_children
 
     def update_root(self, root_project, root_project_children):
         self.root = self.new_root_node(root_project, root_project_children)
@@ -101,8 +96,8 @@ class Project():
         root = self.node_from_raw(root_project)
         return root
 
-    def new_void_node(self, parent):
-        return Node(self.context, {'id': generate_uuid})
+    def new_void_node(self, projectid=None):
+        return Node(self.context, {'id': projectid if projectid else generate_uuid()})
 
     def node_from_raw(self, raw):
         return Node(self.context, raw)
@@ -125,6 +120,8 @@ class Project():
 
         if update_quota:
             self.quota += added_nodes
+
+        self.cache[node.projectid] = node.raw
 
     def remove_node(self, node, recursion=False, update_quota=True):
         NotImplemented
@@ -165,7 +162,8 @@ class Project():
 
 
 class ProjectManager():
-    def __init__(self):
+    def __init__(self, workflowy):
+        self.wf = workflowy
         self.main = None
         self.sub = []
 
@@ -174,7 +172,7 @@ class ProjectManager():
         self.sub[:] = []
 
     def init(self, main_ptree, auxiliary_ptrees):
-        self.main = Project(main_ptree)
+        self.main = self.build_project(main_ptree)
 
         for ptree in auxiliary_ptrees:
             project = self.build_project(ptree)
@@ -188,4 +186,4 @@ class ProjectManager():
             yield project
 
     def build_project(self, ptree):
-        return Project(ptree)
+        return Project(self.wf, ptree)

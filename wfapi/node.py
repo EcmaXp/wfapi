@@ -26,6 +26,11 @@ class Node(object):
         return self.raw.get('lm')
 
     @property
+    def last_modified_b(self):
+        # TODO: lmb support (lm extend) and change name
+        return self.raw.get('lmb')
+
+    @property
     def name(self):
         return self.raw.get('nm')
 
@@ -75,10 +80,10 @@ class Node(object):
         shared = ", shared={!r}".format(self.shared) \
             if self.shared else ""
 
-        return "{clsname}(projectid={projectid!r}, "
+        return ("{clsname}(projectid={projectid!r}, "
         "last_modified={last_modified!r}, "
         "name={name!r}, len(self)={length!r}, description={description!r}"
-        "{_completed_at}{_shared})".format(
+        "{_completed_at}{_shared})").format(
             clsname=type(self).__name__,
             projectid=self.projectid,
             last_modified=self.last_modified,
@@ -107,7 +112,7 @@ class Node(object):
 
     def __iter__(self):
         for raw_child in self.raw.get('ch', []):
-            yield type(self)(raw_child, context=self.context)
+            yield type(self)(self.context, raw_child)
 
     @property
     def children(self):
@@ -115,6 +120,11 @@ class Node(object):
 
     def __getitem__(self, item):
         return self.children[item]
+
+    def __delitem__(self, item):
+        self[item].delete()
+
+    # TODO: delitem?
 
     def _insert(self, index, node):
         self.raw.setdefault('ch', []).insert(index, node)
@@ -141,7 +151,7 @@ class Node(object):
         INDENT_SIZE = 2
 
         def p(*args):
-            print(" " * indent + " ".join(args), file=stream)
+            print(" " * indent + " ".join(map(str, args)), file=stream)
 
         is_empty_root = \
             self.projectid == DEFAULT_ROOT_NODE_ID \
@@ -182,10 +192,3 @@ class Node(object):
         else:
             self.uncomplete()
 
-    @property
-    def completed_at(self):
-        # TODO: convert wf's timestamp to py's timestamp
-        def convert(x):
-            return x
-
-        return convert(self.completed_at)

@@ -1,12 +1,11 @@
 import weakref
-from .workflowy import BaseWorkflowy
 from .operation import OperationCollection
 
 
 class WFContext(OperationCollection):
-    def __init__(self, workflowy:BaseWorkflowy, project):
+    def __init__(self, workflowy, project):
         self.workflowy = workflowy
-        self.project = weakref.ref(project)
+        self.project = project
 
     def transaction(self):
-        return self.workflowy.transaction(self.context)
+        return self.workflowy.transaction(self.project)

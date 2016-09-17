@@ -198,47 +198,11 @@ class FastBrowser(BaseBrowser):
     set_cookie = BuiltinBrowser.set_cookie
 
 
-class RequestsBrowser:
-    def __init__(self, base_url=None):
-        self.base_url = get_default_workflowy_url(base_url)
-        self.session = requests.session()
-
-    def open(self, url, _raw=False, _query=None, **kwargs):
-        data = urlencode(kwargs).encode() if kwargs else None
-        method = 'POST' if data else 'GET'
-
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded",
-        }
-
-        res = self.session.request(
-            method=method,
-            url=url,
-            params=_query,
-            data=kwargs,
-            headers=headers,
-        )
-
-        with closing(res) as fp:
-            content = fp.read()
-
-        content = content.decode()
-
-        if not _raw:
-            # TODO: must not raise 404 error
-            content = json.loads(content)
-
-        return res, content
-
-    def set_cookie(self, name, value):
-        raise NotImplementedError
-
-    def __getitem__(self, url):
-        return functools.partial(self.open, url)
-
-    def reset(self):
-        # TODO: support reset cookies?
+if requests and False:
+    class RequestsBrowser:
         pass
+
+    DefaultBrowser = RequestsBrowser
 
 
 DefaultBrowser = FastBrowser
