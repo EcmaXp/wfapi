@@ -9,20 +9,12 @@ I suggest use this api with shared note for limit view.
 Example
 =======
 
-Normal `Workflowy` and `WeakWorkflowy`(requires new class) are different.
+
+Basic Example
 ```python
 from wfapi import *
 
-# normal mode
 wf = Workflowy(...)
-node = wf.create(wf.root)
-wf.edit(node, "Something")
-
-# weak mode
-class WeakWorkflowy(WFMixinWeak, Workflowy):
-    pass
-
-wf = WeakWorkflowy(...)
 node = wf.root.create()
 node.edit("Something")
 ```
@@ -45,27 +37,11 @@ Workflowy("abcABC1234")
 Workflowy("abcABC1234", username="username", password="password")
 ```
 
-Deamon (+ Weak) Example
-```python
-from wfapi import *
-
-class DeamonWeakWorkflowy(WFMixinDeamon, WFMixinWeak, Workflowy):
-    pass
-
-wf = DeamonWorkflowy(...)
-wf.start()
-node = wf.create(wf.root)
-node.edit("Something")
-wf.stop()
-```
-
 Node operations
 ```python
 from wfapi import *
-class WeakWorkflowy(Workflowy):
-    pass
 
-wf = WeakWorkflowy(...)
+wf = Workflowy(...)
 
 # create nodes
 node = wf.root.create()
@@ -102,17 +78,17 @@ subnode2.complete()
 subnode3.edit("test2")
 subnode3.uncomplete()
 
-assert self[subnode3.projectid] is subnode3
+assert self[subnode3.projectid].raw is subnode3.raw
 
 for node in self:
   node.projectid # UUID-like str or "None"(DEFAULT_ROOT_NODE_ID)
-  node.last_modified # last modified time.
+  node.last_modified # last modified time in python or workflowy time
   node.name # name
-  node.children # children (or just iter node)
+  node.children # children
   node.description # description
-  node.completed_at # complete marking time (or None)
-  node.completed # [READ-ONLY] boolean value for completed.
-  node.shared # [UNSTABLE] shared infomation
+  node.completed_at # complete marking time in python or workflowy time (or None)
+  node.completed # [READ-ONLY?] boolean value for completed.
+  # node.shared
   node.parent # parent node (or None, that is root node)
 
 # just print tree;
@@ -123,17 +99,15 @@ wf.root.pretty_print()
 Transaction example (only commit is supported)
 ```python
 from wfapi import *
-class WeakWorkflowy(WFMixinWeak, Workflowy):
-    pass
 
-wf = WeakWorkflowy(...)
+wf = Workflowy(...)
 
-# transaction make execute command fast, support rollback yet.
+# transaction make execute command fast. (but there is no rollback)
 with wf.transaction():
   for i in range(10):
     subnode3.create()
 
-# threadsafe nested transactions is also suppported.
+# threadsafe nested transactions is NOT suppported.
 with wf.transaction():
   with wf.transaction():
     # just delete node
