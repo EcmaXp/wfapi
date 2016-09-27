@@ -7,7 +7,6 @@ from collections import namedtuple
 from ..error import WFLoginError, WFUnsupportedFeature
 from ..workflowy import Workflowy
 
-
 __all__ = ["WFMixinAutoLogin"]
 
 try:

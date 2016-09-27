@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+
 from math import isinf
 
 from .const import DEFAULT_WORKFLOWY_MONTH_QUOTA

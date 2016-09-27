@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
 
-
 import json
-from contextlib import contextmanager
 
 from .browser import DefaultBrowser
 from .const import DEFAULT_WORKFLOWY_CLIENT_VERSION
 from .error import WFLoginError, WFRuntimeError, ProjectReload
-from .project import ProjectManager
-from wfapi.tools import get_globals_from_home
-from .transaction import TransactionManager
-from .tools import attrdict, pprint, capture_http404, generate_tid
 from .node import Node
-
+from .project import ProjectManager
+from .tools import attrdict, pprint, capture_http404, generate_tid
+from .tools import get_globals_from_home
+from .transaction import TransactionManager
 
 __all__ = ["Workflowy"]
 

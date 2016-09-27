@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
+import functools
 import json
 import sys
 import threading
-import functools
+
 try:
     import requests
 except ImportError:

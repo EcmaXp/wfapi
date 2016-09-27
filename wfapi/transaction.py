@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
+
 import json
 import time
-from threading import Lock
 
 from .error import WFTransactionError
 from .operation import OPERATION_REGISTERED, UnknownOperation
