@@ -1,45 +1,37 @@
-# -*- coding: utf-8 -*-
-
 import json
+import time
 import weakref
-from weakref import WeakValueDictionary
+from contextlib import contextmanager
+from datetime import datetime
+from typing import Type
 
-from .const import DEFAULT_ROOT_NODE_ID
-from .context import WFContext
-from .error import WFRuntimeError
+from .config import DEFAULT_ROOT_NODE_ID
+from .error import WFRuntimeError, WFNodeNotFoundError
 from .node import Node
-from .quota import VoidQuota, SharedQuota, DefaultQuota
+from .operation import Operation, EditOperation, CreateOperation, CompleteOperation, UncompleteOperation, \
+    DeleteOperation, OPERATION_REGISTERED
+from .quota import Quota, VoidQuota, SharedQuota, DefaultQuota
 from .tools import attrdict, uncapdict, generate_uuid
 
-__all__ = ["Project", "ProjectManager"]
+if False:
+    from .workflowy import Workflowy
+
+__all__ = ["Project"]
 
 
-# TODO: support auxiliaryProjectTreeInfos, mainProjectTreeInfo
-#       in technical, auxiliaryProjectTreeInfo == mainProjectTreeInfo
-# TODO: not only shared node. but also main project.
-# TODO: embedded support in here, and node's support are in node.embedded
-
-
-class Project():
+class Project:
     def __init__(self, workflowy, ptree):
-        self.context = WFContext(workflowy, weakref.proxy(self))
+        self.workflowy = workflowy  # type: Workflowy
         self.status = attrdict()
-        self.quota = VoidQuota()
-
-        self.data = WeakValueDictionary()
+        self.quota = VoidQuota()  # type: Quota
         self.root = None
-        self.cache = {}
+        self.cache = weakref.WeakValueDictionary()
+        self.track = {}
+        self.operations = []
+        self.pending = {}
+        self.transaction_level = 0
 
         self.init(ptree)
-
-    def __contains__(self, item):
-        if isinstance(item, Node):
-            item = item.projectid
-
-        return item in self.cache
-
-    def __getitem__(self, projectid):
-        return self.node_from_raw(self.cache[projectid])
 
     def init(self, ptree):
         # TODO: support auxiliaryProjectTreeInfos for embbed node.
@@ -54,85 +46,138 @@ class Project():
 
         s.is_shared = s.get("share_type") is not None
 
-        self.quota = (SharedQuota if "over_quota" in s else DefaultQuota)()
+        self.quota = SharedQuota() if "over_quota" in s else DefaultQuota()
         self.quota.update(s)
 
-        self.update_root(
-            s.pop("root_project"),
-            s.pop("root_project_children"),
-        )
+        root_project = s.pop("root_project")
+        root_project_children = s.pop("root_project_children")
+        self._update_root(root_project, root_project_children)
 
-    def update_root(self, root_project, root_project_children):
-        self.root = self.new_root_node(root_project, root_project_children)
-        cache = self.cache
+    def _refresh_project(self, ptree):
+        self.init(ptree)
 
-        # TODO: how to cache parent?
+        removed = set()
+        for projectid, node in self.cache.items():
+            if projectid in self.track:
+                path = self.find_path(projectid)
+                raw = self.resolve_path(path)
+                node.raw = raw
+            else:
+                # TODO: if node.raw is None, raise error if possible (in Node class)
+                node.raw = None
+                removed.add(projectid)
 
-        def _update_child(raw):
-            assert "id" in raw
-            projectid = raw.get('id')
+        for projectid in removed:
+            self.cache.pop(projectid, None)
 
-            cache[projectid] = raw
+    def _reset_track(self):
+        self.track.clear()
 
-            ch = raw.get("ch")
-            if ch is None:
-                return
+        for parentid, projectid in self._travalse_child(None, self.root.raw):
+            self.track[projectid] = parentid
 
-            for child in ch:
-                child['_p'] = projectid
-                _update_child(child)
-
-        _update_child(self.root.raw)
-
-    def new_root_node(self, root_project, root_project_children):
-        # XXX [!] project is Project, root_project is root node. ?!
-        if root_project is None:
-            root_project = dict(id=DEFAULT_ROOT_NODE_ID)
-        else:
-            root_project.update(id=DEFAULT_ROOT_NODE_ID)
-            # in shared mode,
-            # root will have uuid -(replace)> DEFAULT_ROOT_NODE_ID
-
-        root_project.update(ch=root_project_children)
-        root = self.node_from_raw(root_project)
-        return root
-
-    def new_void_node(self, projectid=None):
-        return Node(self.context, {'id': projectid if projectid else generate_uuid()})
-
-    def node_from_raw(self, raw):
-        return Node(self.context, raw)
-
-    def _walk(self, raw=None):
-        if raw is None:
-            raw = self.root.raw
-
-        yield raw
+    def _travalse_child(self, parentid, raw):
+        projectid = raw["id"]
+        yield parentid, projectid
 
         ch = raw.get("ch")
         if ch is not None:
-            walk = self._walk
             for child in ch:
-                yield from walk(child)
+                yield from self._travalse_child(projectid, child)
 
-    def add_node(self, node, recursion=True, update_quota=True):
-        NotImplemented
-        added_nodes = 1
+    def _update_root(self, root_project, root_project_children):
+        root = {} if root_project is None else root_project
+
+        root.update(
+            # in shared mode, root will have uuid -(replace)> DEFAULT_ROOT_NODE_ID
+            id=DEFAULT_ROOT_NODE_ID,
+
+            ch=root_project_children,
+        )
+
+        self.root = self.new_node(root)
+        self._reset_track()
+
+    def new_node(self, raw=None, projectid=None):
+        if raw is None:
+            raw = {
+                'id': generate_uuid() if projectid is None else projectid,
+            }
+
+        node = Node(self, raw)
+
+        if node.projectid in self.track:
+            self.cache[node.projectid] = node
+
+        return node
+
+    def find_path(self, projectid):
+        seq = []
+
+        while projectid:
+            seq.append(projectid)
+            projectid = self.track[projectid]
+
+        seq = seq[::-1]
+        if not seq:
+            raise WFNodeNotFoundError(projectid)
+
+        return seq
+
+    def resolve_path(self, path):
+        raw = self.root.raw
+        for projectid in path:
+            assert 'ch' in raw
+            for child in raw['ch']:
+                if child['id'] == projectid:
+                    raw = child
+                    break
+
+        return raw
+
+    def find_parent(self, node: Node) -> Node:
+        return self.find_node(node.parentid)
+
+    def find_node(self, projectid, raw=None) -> Node:
+        node = self.cache.get(projectid)
+        if node is not None:
+            return node
+
+        if raw is None:
+            path = self.find_path(projectid)
+            raw = self.resolve_path(path)
+
+        return self.new_node(raw)
+
+    def find_child(self, node: Node):
+        ch = node.raw.get('ch')
+        if not ch:
+            return
+
+        for child in ch:
+            yield self.find_node(child['id'], raw=child)
+
+    def add_node(self, node: Node, parent: Node, update_quota=True):
+        cnt = 0
+        for cnt, (parentid, projectid) in enumerate(self._travalse_child(parent.projectid, node.raw), 1):
+            self.track[projectid] = parentid
 
         if update_quota:
-            self.quota += added_nodes
+            self.quota += cnt
 
-        self.cache[node.projectid] = node.raw
+    def remove_node(self, node: Node, update_quota=True):
+        cnt = 0
+        for cnt, (_, projectid) in enumerate(self._travalse_child(node.projectid, node.raw), 1):
+            del self.track[projectid]
 
-    def remove_node(self, node, recursion=False, update_quota=True):
-        NotImplemented
-        removed_nodes = 1
+            node = self.cache.pop(projectid, None)
+            if node is not None:
+                node.raw = None
 
         if update_quota:
-            self.quota -= removed_nodes
+            self.quota -= cnt
 
     def update_by_pushpoll(self, res):
-        # like workflowy.update_by_pushpollsub
         error = res.get("error")
         if error:
             raise WFRuntimeError(error)
@@ -143,7 +188,6 @@ class Project():
 
         if res.get("need_refreshed_project_tree"):
             self._refresh_project_tree()
-            # XXX how to execute operation after refresh project tree? no idea.
 
         s.polling_interval = res.new_polling_interval_in_ms / 1000
         self.quota.update(res)
@@ -152,39 +196,119 @@ class Project():
         return data
 
     def _refresh_project_tree(self):
-        # TODO: refreshing project must keep old node if uuid are same.
         # TODO: must check root are shared. (share_id and share_type will help)
+        self.workflowy.init()
 
-        raise NotImplementedError
+    @contextmanager
+    def transaction(self):
+        if self.operations is None:
+            self.operations = []
 
-    @property
-    def pretty_print(self):
-        return self.root.pretty_print
+        self.transaction_level += 1
 
+        try:
+            yield self.operations
+        finally:
+            self.transaction_level -= 1
 
-class ProjectManager():
-    def __init__(self, workflowy):
-        self.wf = workflowy
-        self.main = None
-        self.sub = []
+        if not self.transaction_level:
+            self.commit()
 
-    def clear(self):
-        self.main = None
-        self.sub[:] = []
+    def commit(self):
+        operations = []
+        for op in self.operations[:]:  # type: Operation
+            op.pre_operation()
+            op_json = op.get_operation()
+            op_json["client_timestamp"] = self.get_client_timestamp()
+            op_json["undo_data"] = op.get_undo()
+            operations.append(op_json)
+            self.operations.remove(op)
 
-    def init(self, main_ptree, auxiliary_ptrees):
-        self.main = self.build_project(main_ptree)
+        transaction = dict(
+            most_recent_operation_transaction_id=
+            self.status.most_recent_operation_transaction_id,
+            operations=operations,
+        )
 
-        for ptree in auxiliary_ptrees:
-            project = self.build_project(ptree)
-            self.sub.append(project)
+        if self.status.is_shared:
+            assert self.status.share_type == "url"
+            transaction.update(
+                share_id=self.status.share_id,
+            )
 
-        return self.main
+        transactions = [transaction]
 
-    def __iter__(self):
-        yield self.main
-        for project in self.sub:
-            yield project
+        response = self.workflowy._push_and_poll(transactions)
+        for result in response['results']:
+            error = result.get('error')
+            if error:
+                raise WFRuntimeError(error)
 
-    def build_project(self, ptree):
-        return Project(self.wf, ptree)
+            server_run_operation_transaction_json = result['server_run_operation_transaction_json']
+            server_run_operation_transaction = json.loads(server_run_operation_transaction_json)
+            for op_json in server_run_operation_transaction['ops']:
+                op_cls: Type[Operation] = OPERATION_REGISTERED[op_json['type']]
+                op = op_cls.from_server_operation(self, op_json['data'])
+                op.post_operation()
+
+    def op_edit(self, node, name=None, description=None):
+        with self.transaction() as tr:
+            tr.append(EditOperation(self, node, name=name, description=description))
+
+    def op_create(self, node, priority=-1, child=None):
+        if child is None:
+            child = self.new_node()
+
+        with self.transaction() as tr:
+            tr.append(CreateOperation(self, node, child=child, priority=priority))
+
+        return child
+
+    def op_complete(self, node, modified=None):
+        with self.transaction() as tr:
+            tr.append(CompleteOperation(self, node, modified=modified))
+
+    def op_uncomplete(self, node):
+        with self.transaction() as tr:
+            tr.append(UncompleteOperation(self, node))
+
+    def op_delete(self, node):
+        with self.transaction() as tr:
+            tr.append(DeleteOperation(self, node))
+
+    def op_search(self, node, pattern):
+        # pattern is very complex.
+        # http://blog.workflowy.com/2012/09/25/hidden-search-operators/
+        raise NotImplementedError("search is not implemented yet.")
+
+    def get_client_timestamp(self, current_time=None):
+        if current_time is None:
+            current_time = time.time()
+
+        return current_time - self.status.date_joined_timestamp_in_seconds
+
+    def get_python_timestamp(self, client_timestamp):
+        current_timestamp = self.status.date_joined_timestamp_in_seconds + client_timestamp
+        return datetime.fromtimestamp(current_timestamp)
+
+    def find_pending(self, projectid):
+        node = self.pending.get(projectid)
+        if node is not None:
+            return node
+
+        return self.new_node(projectid=projectid)
+
+    def walk(self):
+        return self.root.walk()
+
+    def __contains__(self, item):
+        if isinstance(item, Node):
+            item = item.projectid
+
+        return item in self.track
+
+    def __getitem__(self, projectid):
+        return self.find_node(projectid)
+
+    def __len__(self):
+        return len(self.track)

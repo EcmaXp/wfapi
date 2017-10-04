@@ -13,10 +13,6 @@ class WFError(WFException):
     pass
 
 
-class WFUnsupportedFeature(WFError):
-    pass
-
-
 class WFRuntimeError(WFError):
     pass
 
@@ -30,6 +26,10 @@ class WFLoginError(WFError):
 
 
 class WFNodeError(WFError):
+    pass
+
+
+class WFNodeNotFoundError(WFNodeError):
     pass
 
 

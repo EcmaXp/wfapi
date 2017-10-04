@@ -1,6 +1,32 @@
 wfapi changelog
 ===============
 
+## 0.8.0
+
+Removed:
+ - `ProjectManager`, `NodeManager`, `WFContext`
+ - `BuiltinBrowser`, `FastBrowser`
+ - `ServerTransaction`, `ClientTransactions`, `TransactionManager`
+ - `Node.last_modified_b`
+ - `WFMixinAutoLogin`
+ - Unused Operation classes
+
+Break change:
+ - wfapi 0.8.0 will support python 3.6.x > only.
+ - `wfapi.const` renamed as `wfapi.config`
+
+Bug fixes:
+ - almost unknown bug are fixed.
+
+Other:
+ - too many lines of code removed, code is a more cleaner.
+ - after the remove `TransactionManager`, modify the sub project node will not work. (sorry)
+
+Features:
+ - memory usage reduced (only used Node will keep by cache)
+ - refresh_project_tree supported (?)
+ - now `Node.last_modified` and `Node.completed_at` return `datetime` object.
+
 ## 0.6.x
 
 Bug fixes:
@@ -48,7 +74,7 @@ Features:
 ## 0.2.0 (2015-01-10)
 
 Features:
- 
+
  - Module system are applyed.
 
 ## 0.1.19 (2015-01-05)
@@ -57,7 +83,7 @@ Features:
 
  - Access attribute with node are changed.
  - very simple deamon croller (and unstable)
- 
+
 ## 0.1.17 (2015-01-05)
 
 Released for pre-alpha use, and registered to PyPI.
@@ -78,13 +104,13 @@ Features:
 ## 0.1.11 (2015-01-01)
 
 Features:
- 
- - changed for easy node access. 
+
+ - changed for easy node access.
  - raise `WFRuntimeError` if error raised from web.
   - all error except `HTTPError` are subclass of `WFError`
 
 Changed:
- 
+
  - `wfapi_future.py` are renamed to `wfapi.py`
 
 ## 0.1.9 (2014-12-30)

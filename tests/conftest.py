@@ -1,12 +1,8 @@
 import pytest
 
-from wfapi import WFMixinWeak, Workflowy
-
-
-class WeakWorkflowy(Workflowy, WFMixinWeak):
-    pass
+from wfapi import Workflowy
 
 
 @pytest.fixture(scope="module")
 def session():
-    return WeakWorkflowy("hBYC5FQsDC")
+    return Workflowy("hBYC5FQsDC")
