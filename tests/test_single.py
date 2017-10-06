@@ -1,11 +1,7 @@
 from wfapi import Workflowy
 
 
-def test_op(session: Workflowy):
-    with session.transaction():
-        for node in session.root:
-            node.delete()
-
+def test_op(session: Workflowy):    
     # create nodes
     node = session.root.create()
     node2 = session.root.create()
@@ -42,7 +38,9 @@ def test_op(session: Workflowy):
     subnode3.uncomplete()
 
     assert session.main[subnode3.projectid].raw is subnode3.raw
-
+    
+    nodes = {node, node2, subnode2, subnode3}
+    
     for node in session.root.walk():
         node.projectid  # UUID-like str or "None"(DEFAULT_ROOT_NODE_ID)
         node.last_modified  # last modified time in python or workflowy time
@@ -57,3 +55,7 @@ def test_op(session: Workflowy):
     # just print tree;
     session.root.pretty_print()
     # or node.pretty_print()
+
+    with session.transaction():
+        for node in nodes:
+            node.delete()
