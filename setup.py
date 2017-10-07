@@ -1,7 +1,7 @@
 from setuptools import setup
 
 WFAPI_NAME = "wfapi"
-WFAPI_VERSION = "0.8.0"
+WFAPI_VERSION = "0.8.1"
 WFAPI_DESC = "Workflowy's Unoffical API for Python 3.6"
 
 with open("README.md") as fp:
