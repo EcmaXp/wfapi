@@ -5,7 +5,7 @@ Workflowy's Unofficial API for Python3.
 
 This library is ***UNSTABLE!*** (sorry)
 
-```python3
+```python
 # create nodes
 node = session.root.create()
 node2 = session.root.create()
