@@ -11,7 +11,7 @@ setup(
     name=WFAPI_NAME,
     url="https://github.com/ecmaxp/wfapi",
     author="EcmaXp",
-    author_email="wfapi@ecmaxp.net",
+    author_email="module-wfapi@ecmaxp.pe.kr",
     version=WFAPI_VERSION,
     description=WFAPI_DESC,
     python_requires=">=3.6",
